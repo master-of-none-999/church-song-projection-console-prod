@@ -334,19 +334,46 @@
           }
         };
 
-        /* 僅針對 Chrome 核心：在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保按 F11 必能觸發 requestFullscreen() */
+        /* 僅針對 Chrome 核心：在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保按 F11 必能觸發 requestFullscreen()，同時支援視窗狀態下點擊／滾輪翻頁 */
         let focusGuard = null;
         if (isChromium) {
           focusGuard = doc.createElement('div');
           focusGuard.id = 'fsFocusGuard';
-          focusGuard.title = '請按 F11 或點擊左下角「⛶ 全螢幕」（雙擊畫面亦可直接全螢幕）';
+          focusGuard.title = '單擊翻下一頁（左側 1/4 回上一頁）｜雙擊或按 F11 進入全螢幕';
           focusGuard.style.cssText = 'position:fixed;inset:0;z-index:8000;background:transparent;cursor:pointer;';
-          focusGuard.onclick = function() {
+          let clickTimer = null;
+          focusGuard.onclick = function(ev) {
             try { doc.body.focus(); } catch (e) {}
+            if (clickTimer) win.clearTimeout(clickTimer);
+            const x = ev ? ev.clientX : (win.innerWidth / 2);
+            clickTimer = win.setTimeout(function() {
+              clickTimer = null;
+              if (x < win.innerWidth * 0.25) {
+                stepSlidePage(-1);
+              } else {
+                stepSlidePage(1);
+              }
+            }, 220);
           };
           focusGuard.ondblclick = function() {
+            if (clickTimer) {
+              win.clearTimeout(clickTimer);
+              clickTimer = null;
+            }
             enterPersistentFullscreen();
           };
+          let lastWheelTime = 0;
+          focusGuard.addEventListener('wheel', function(ev) {
+            ev.preventDefault();
+            const now = Date.now();
+            if (now - lastWheelTime < 300) return;
+            lastWheelTime = now;
+            if (ev.deltaY > 0) {
+              stepSlidePage(1);
+            } else if (ev.deltaY < 0) {
+              stepSlidePage(-1);
+            }
+          }, { passive: false });
           doc.body.appendChild(focusGuard);
 
           frame.addEventListener('load', function() {
@@ -398,7 +425,7 @@
 
         doc.body.appendChild(bar);
 
-        /* 攔截鍵盤 F11，自動轉為呼叫 requestFullscreen()，確保按 F11 也能在換歌時 100% 維持全螢幕 */
+        /* 攔截鍵盤 F11（轉為呼叫 requestFullscreen()），並在視窗狀態下同步支援方向鍵／空白鍵／數字鍵翻頁 */
         const handleKeyDown = function(e) {
           if (e.key === 'F11' || e.keyCode === 122) {
             e.preventDefault();
@@ -408,6 +435,17 @@
             } else if (doc.exitFullscreen) {
               doc.exitFullscreen().catch(function() {});
             }
+            return;
+          }
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            stepSlidePage(1);
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Backspace') {
+            e.preventDefault();
+            stepSlidePage(-1);
+          } else if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            e.preventDefault();
+            jumpToSlidePage(Number(e.key));
           }
         };
         win.addEventListener('keydown', handleKeyDown, true);
