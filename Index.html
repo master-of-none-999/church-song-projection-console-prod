@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>廣東道平安福音堂 - 詩歌快速檢索系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .active-tab { border-bottom: 4px solid #8b5cf6; color: #8b5cf6; font-weight: bold; }
+    .chip-active { background-color: #8b5cf6 !important; color: white !important; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10">
+
+  <!-- 頁首與導覽列 -->
+  <header class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-4">
+        <img id="churchLogo" 
+             src="https://lh3.googleusercontent.com/d/1EsMm_7YfStPxWeeVTZy-jldsA_xSn2I-" 
+             alt="廣東道平安福音堂 Logo" 
+             class="w-20 h-20 object-contain"
+             onerror="this.style.display='none'; document.getElementById('defaultIcon').style.display='inline-block';">
+        <i id="defaultIcon" class="fa-solid fa-church text-purple-600 text-5xl font-bold hidden"></i>
+        <div>
+          <div class="text-2xl sm:text-3xl font-extrabold text-purple-700 tracking-wide">廣東道平安福音堂</div>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-700 mt-0.5" id="appTitle">詩歌快速檢索系統</h1>
+        </div>
+      </div>
+      
+      <!-- 導覽列：僅在同工權限時顯示 -->
+      <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center">
+        <button type="button" id="helpBtn" onclick="toggleHelpModal(true)" class="hidden px-3 py-2 rounded-xl text-sm font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 shadow-sm transition-all flex items-center gap-1.5" title="查看影音同工投影操作說明">
+          <i class="fa-solid fa-circle-question"></i> 操作說明
+        </button>
+        <button type="button" id="blackoutBtn" onclick="blackoutProjectorScreen()" class="hidden px-3 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-black text-white shadow-sm transition-all flex items-center gap-1.5" title="將副螢幕切換為全黑待機畫面（不退出全螢幕）">
+          <i class="fa-solid fa-tv"></i> 投影黑屏待機
+        </button>
+        <nav id="adminNav" class="flex space-x-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto justify-center hidden">
+          <button onclick="switchRole('av')" id="tab-av" class="px-3 py-2 rounded-lg text-sm transition-all active-tab bg-white shadow-sm">🎬 影音 (PPT)</button>
+          <button onclick="switchRole('musician')" id="tab-musician" class="px-3 py-2 rounded-lg text-sm transition-all text-slate-600">🎵 樂手 (歌譜)</button>
+          <button onclick="switchRole('congregation')" id="tab-congregation" class="px-3 py-2 rounded-lg text-sm transition-all text-slate-600">📖 會眾歌詞</button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-6">
+    <!-- 搜尋與篩選區域 -->
+    <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 mb-6 space-y-4">
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+        <input type="text" id="searchInput" oninput="handleSearch()" placeholder="輸入歌名、第一句歌詞、編號或歌詞內文..." class="w-full pl-12 pr-4 py-3 text-lg border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+      </div>
+
+      <div>
+        <div class="text-xs font-semibold text-slate-400 mb-2">詩集分類：</div>
+        <div class="flex flex-wrap gap-2" id="categoryChips">
+          <button onclick="filterCategory('ALL')" class="cat-chip px-3 py-1 rounded-full text-xs bg-purple-600 text-white chip-active">全部</button>
+          <button onclick="filterCategory('平安詩集')" class="cat-chip px-3 py-1 rounded-full text-xs bg-slate-100 text-slate-600">平安詩集</button>
+          <button onclick="filterCategory('敬拜頌歌')" class="cat-chip px-3 py-1 rounded-full text-xs bg-slate-100 text-slate-600">敬拜頌歌</button>
+          <button onclick="filterCategory('松柏詩選')" class="cat-chip px-3 py-1 rounded-full text-xs bg-slate-100 text-slate-600">松柏詩選</button>
+          <button onclick="filterCategory('其他歌曲')" class="cat-chip px-3 py-1 rounded-full text-xs bg-slate-100 text-slate-600">其他歌曲</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="text-xs font-semibold text-slate-400 mb-2">歌名字數：</div>
+        <div class="flex flex-wrap gap-1.5" id="charChipsContainer"></div>
+      </div>
+    </div>
+
+    <!-- 狀態列 -->
+    <div class="flex justify-between items-center mb-4 px-1">
+      <div class="text-sm text-slate-500" id="resultCount">載入中...</div>
+      <div id="loadingSpinner" class="animate-spin text-purple-600"><i class="fa-solid fa-circle-notch"></i></div>
+    </div>
+
+    <!-- 詩歌卡片容器 -->
+    <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </main>
+
+  <!-- 操作說明彈窗 Modal -->
+  <div id="helpModal" onclick="if(event.target===this) toggleHelpModal(false)" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden">
+      <div class="bg-purple-700 text-white px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2 font-bold text-lg">
+          <i class="fa-solid fa-circle-question"></i>
+          <span>影音同工投影操作指引</span>
+        </div>
+        <button type="button" onclick="toggleHelpModal(false)" class="text-purple-200 hover:text-white text-xl leading-none px-1">&times;</button>
+      </div>
+      <div class="p-6 space-y-4 text-sm text-slate-700 max-h-[80vh] overflow-y-auto leading-relaxed">
+        <div class="bg-purple-50 border border-purple-100 rounded-xl p-4 space-y-1.5">
+          <div class="font-bold text-purple-900 text-base">🎬 一、聚會前準備（每堂只需做 1 次）</div>
+          <ol class="list-decimal list-inside space-y-1.5 text-slate-700">
+            <li><strong>開啟投影視窗</strong>：點擊第 1 首詩歌的 <span class="text-orange-600 font-semibold">「開啟 PPT 簡報 (副螢幕)」</span>。<span class="text-xs text-slate-500">（首次使用若被瀏覽器攔截，請於網址列右方選擇「永遠允許彈出式視窗」）</span></li>
+            <li><strong>移至副螢幕並全螢幕</strong>：
+              <ul class="list-disc list-inside ml-4 mt-1 space-y-1.5 text-sm">
+                <li><strong>Firefox（推薦）</strong>：視窗會自動在副螢幕開啟，點左下角 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs">⛶ 全螢幕</span> 或按 <kbd class="inline-block whitespace-nowrap px-1.5 py-0.5 bg-slate-200 rounded text-xs font-mono">F11</kbd> 即可。</li>
+                <li><strong>Chrome / Edge</strong>：將彈出視窗拖拉至副螢幕，點左下角 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs">⛶ 全螢幕</span>、按 <kbd class="inline-block whitespace-nowrap px-1.5 py-0.5 bg-slate-200 rounded text-xs font-mono">F11</kbd> 或<strong>雙擊畫面中央</strong>進入無邊框全螢幕。</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1.5">
+          <div class="font-bold text-slate-900 text-base">🎵 二、聚會中切換詩歌與黑屏待機</div>
+          <ul class="list-disc list-inside space-y-1.5">
+            <li><strong>換下一首詩歌</strong>：<span class="text-red-600 font-bold">聚會期間請勿按 ✕ 關閉副螢幕視窗！</span>直接在主螢幕點擊下一首詩歌按鈕，副螢幕就會<strong>保持在全螢幕狀態下直接切換簡報</strong>。</li>
+            <li><strong>暫停投影（講道／報告時）</strong>：點擊主螢幕右上角 <span class="inline-block whitespace-nowrap bg-slate-800 text-white px-2 py-0.5 rounded text-xs">📺 投影黑屏待機</span> 即可變全黑畫面；再按一下 <span class="inline-block whitespace-nowrap bg-amber-600 text-white px-2 py-0.5 rounded text-xs">👁️ 解除黑屏</span>（或點選下一首詩歌）即可瞬間恢復畫面。</li>
+          </ul>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
+          <div class="font-bold text-amber-900 text-base">⚠️ 三、使用注意事項（系統限制）</div>
+          <ul class="list-disc list-inside space-y-1.5 text-amber-900/90">
+            <li><strong>請勿中途關閉投影視窗</strong>：受瀏覽器安全限制，若按 ✕ 關閉了副螢幕視窗，下次再開啟時視窗會重回主螢幕。請善用「📺 投影黑屏待機」代替關閉視窗。</li>
+            <li><strong>簡報翻頁</strong>：在副螢幕簡報點一下後，即可用鍵盤方向鍵（<kbd class="inline-block px-1.5 bg-white border rounded text-xs">←</kbd> / <kbd class="inline-block px-1.5 bg-white border rounded text-xs">→</kbd> 或空白鍵）翻頁。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-6 py-3.5 border-t border-slate-100 flex justify-end">
+        <button type="button" onclick="toggleHelpModal(false)" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl text-sm transition-all">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 精準字串比對，徹底防止 'false' 被誤判為 true
+    const IS_ADMIN = ("<?= isAdmin ?>" === "true");
+    
+    let allSongs = [];
+    let currentRole = IS_ADMIN ? 'av' : 'congregation'; 
+    let selectedCategory = 'ALL';
+    let selectedCharCount = 0;
+    let cachedOtherScreen = null;
+    let pptWindowRef = null;
+
+    /**
+     * 預先快取副螢幕資訊（避免在點擊開啟 PPT 當下使用 async/await 導致喪失 User Gesture Activation）
+     */
+    async function preCacheScreenDetails() {
+      if (!('getScreenDetails' in window) || cachedOtherScreen) return;
+      try {
+        const screenDetails = await window.getScreenDetails();
+        const updateCachedScreen = () => {
+          cachedOtherScreen = screenDetails.screens.find(s => !s.isPrimary) ||
+                              screenDetails.screens.find(s => s !== screenDetails.currentScreen) ||
+                              null;
+        };
+        updateCachedScreen();
+        screenDetails.addEventListener('screenschange', updateCachedScreen);
+      } catch (err) {
+        // GAS 雙層沙盒 iframe 可能會阻擋 window-management 權限，靜默降級即可
+      }
+    }
+
+    // 在首次點擊頁面時嘗試預先快取多重螢幕資訊
+    document.addEventListener('click', preCacheScreenDetails, { once: true });
+
+    let appInitialized = false;
+    function initApp() {
+      if (appInitialized) return;
+      appInitialized = true;
+
+      initCharChips();
+      preCacheScreenDetails();
+
+      if (IS_ADMIN) {
+        document.getElementById('adminNav').classList.remove('hidden');
+        document.getElementById('blackoutBtn').classList.remove('hidden');
+        document.getElementById('helpBtn').classList.remove('hidden');
+        document.getElementById('appTitle').innerText = '詩歌檢索控制台 (同工版)';
+      } else {
+        document.getElementById('adminNav').classList.add('hidden');
+        document.getElementById('blackoutBtn').classList.add('hidden');
+        document.getElementById('helpBtn').classList.add('hidden');
+        document.getElementById('appTitle').innerText = '詩歌歌詞搜尋系統 (會眾版)';
+      }
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(data => {
+            allSongs = Array.isArray(data) ? data : [];
+            document.getElementById('loadingSpinner').classList.add('hidden');
+            render();
+          })
+          .withFailureHandler(err => {
+            const errMsg = (err && err.message) ? err.message : String(err || '未知錯誤');
+            document.getElementById('resultCount').innerText = '資料讀取失敗：' + errMsg;
+            document.getElementById('loadingSpinner').classList.add('hidden');
+          })
+          .getSongsData(IS_ADMIN);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+    window.addEventListener('load', initApp);
+
+    /**
+     * 轉換為直接放映網址
+     */
+    function convertToDirectPlayUrl(rawUrl) {
+      if (!rawUrl) return '';
+      // 1. Google Slides 轉為無邊框自動放映模式
+      const slideMatch = rawUrl.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
+      if (slideMatch && slideMatch[1]) {
+        return 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false';
+      }
+      // 2. Google Drive 檔案轉為預覽模式
+      const driveMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
+      if (driveMatch && driveMatch[1]) {
+        return 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview';
+      }
+      return rawUrl;
+    }
+
+    /**
+     * 建立或更新副螢幕專屬容器視窗（頂層不跳頁、僅切換內部 iframe，確保全螢幕 100% 不會跳出）
+     */
+    function ensureProjectorShell(win, isNewWindow) {
+      const doc = win.document;
+      let frame = doc.getElementById('pptFrame');
+      if (!frame) {
+        doc.title = '廣東道平安福音堂 - 詩歌投影幕';
+        doc.documentElement.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;';
+        doc.body.tabIndex = -1;
+        doc.body.style.cssText = 'margin:0;padding:0;width:100vw;height:100vh;background:#000;overflow:hidden;position:relative;outline:none;';
+
+        frame = doc.createElement('iframe');
+        frame.id = 'pptFrame';
+        frame.setAttribute('allow', 'fullscreen; autoplay');
+        frame.setAttribute('allowfullscreen', 'true');
+        frame.style.cssText = 'border:0;width:100vw;height:100vh;display:block;background:#000;';
+        doc.body.appendChild(frame);
+
+        const standby = doc.createElement('div');
+        standby.id = 'standbyOverlay';
+        standby.style.cssText = 'display:none;position:fixed;inset:0;z-index:5000;background:#000;color:#475569;align-items:center;justify-content:center;font-family:sans-serif;font-size:18px;user-select:none;';
+        standby.innerText = '';
+        doc.body.appendChild(standby);
+
+        const isChromium = !!win.chrome;
+        let guardDismissed = false;
+
+        const enterPersistentFullscreen = function() {
+          if (doc.documentElement.requestFullscreen) {
+            doc.documentElement.requestFullscreen().then(function() {
+              try { frame.contentWindow.focus(); } catch (e) {}
+            }).catch(function() {});
+          }
+        };
+
+        /* 僅針對 Chrome 核心：在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保按 F11 必能觸發 requestFullscreen() */
+        let focusGuard = null;
+        if (isChromium) {
+          focusGuard = doc.createElement('div');
+          focusGuard.id = 'fsFocusGuard';
+          focusGuard.title = '請按 F11 或點擊左下角「⛶ 全螢幕」（雙擊畫面亦可直接全螢幕）';
+          focusGuard.style.cssText = 'position:fixed;inset:0;z-index:8000;background:transparent;cursor:pointer;';
+          focusGuard.onclick = function() {
+            try { doc.body.focus(); } catch (e) {}
+          };
+          focusGuard.ondblclick = function() {
+            enterPersistentFullscreen();
+          };
+          doc.body.appendChild(focusGuard);
+
+          frame.addEventListener('load', function() {
+            if (!doc.fullscreenElement && !guardDismissed) {
+              try { doc.body.focus(); } catch (e) {}
+            } else if (doc.fullscreenElement) {
+              try { frame.contentWindow.focus(); } catch (e) {}
+            }
+          });
+
+          win.setInterval(function() {
+            if (!doc.fullscreenElement && !guardDismissed && doc.activeElement === frame) {
+              try { doc.body.focus(); } catch (e) {}
+            }
+          }, 120);
+        }
+
+        const bar = doc.createElement('div');
+        bar.id = 'fsHelperBar';
+        bar.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:9999;display:flex;align-items:center;gap:8px;background:rgba(15,23,42,0.92);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:bold;box-shadow:0 4px 16px rgba(0,0,0,0.5);font-family:sans-serif;';
+
+        const tip = doc.createElement('span');
+        tip.innerText = '💡 移至副螢幕後請點「⛶ 全螢幕」或按 F11（切換詩歌不跳出）';
+        bar.appendChild(tip);
+
+        const fsBtn = doc.createElement('button');
+        fsBtn.id = 'fsToggleBtn';
+        fsBtn.type = 'button';
+        fsBtn.innerText = '⛶ 全螢幕';
+        fsBtn.style.cssText = 'background:#7c3aed;color:#fff;border:none;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:bold;cursor:pointer;';
+        fsBtn.onclick = enterPersistentFullscreen;
+        bar.appendChild(fsBtn);
+
+        const closeTipBtn = doc.createElement('button');
+        closeTipBtn.type = 'button';
+        closeTipBtn.innerText = '✕';
+        closeTipBtn.title = '隱藏此提示列';
+        closeTipBtn.style.cssText = 'background:transparent;color:#94a3b8;border:none;padding:2px 6px;font-size:14px;cursor:pointer;';
+        closeTipBtn.onclick = function() {
+          guardDismissed = true;
+          bar.style.display = 'none';
+          if (focusGuard) focusGuard.style.display = 'none';
+        };
+        bar.appendChild(closeTipBtn);
+
+        doc.body.appendChild(bar);
+
+        /* 攔截鍵盤 F11，自動轉為呼叫 requestFullscreen()，確保按 F11 也能在換歌時 100% 維持全螢幕 */
+        const handleKeyDown = function(e) {
+          if (e.key === 'F11' || e.keyCode === 122) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!doc.fullscreenElement) {
+              enterPersistentFullscreen();
+            } else if (doc.exitFullscreen) {
+              doc.exitFullscreen().catch(function() {});
+            }
+          }
+        };
+        win.addEventListener('keydown', handleKeyDown, true);
+        doc.addEventListener('keydown', handleKeyDown, true);
+
+        /* 拖拉視窗標題列至副螢幕時，保持外層 body 焦點以便直接按 F11 觸發不跳出全螢幕 */
+        win.addEventListener('focus', function() {
+          if (!doc.fullscreenElement) {
+            try { doc.body.focus(); } catch (e) {}
+          }
+        });
+
+        const checkFsState = function() {
+          const isFs = !!doc.fullscreenElement || (!isChromium && (win.innerHeight >= win.screen.height - 6));
+          bar.style.display = (isFs || guardDismissed) ? 'none' : 'flex';
+          if (focusGuard) {
+            focusGuard.style.display = (!!doc.fullscreenElement || guardDismissed) ? 'none' : 'block';
+          }
+          if (doc.fullscreenElement) {
+            try { frame.contentWindow.focus(); } catch (e) {}
+          } else if (isChromium && !guardDismissed) {
+            try { doc.body.focus(); } catch (e) {}
+          }
+        };
+        doc.addEventListener('fullscreenchange', checkFsState);
+        win.addEventListener('resize', checkFsState);
+      }
+      return frame;
+    }
+
+    /**
+     * 同步執行開啟視窗（嚴禁使用 async/await，確保 100% 觸發獨立新視窗而非 Tab）
+     */
+    function openPPTOnSecondScreen(rawUrl, event) {
+      if (!rawUrl || rawUrl === '#' || rawUrl === '') {
+        alert('此詩歌尚未設定 PPT 連結！');
+        return false;
+      }
+
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      const playUrl = convertToDirectPlayUrl(rawUrl);
+      let isNewWindow = false;
+
+      if (!pptWindowRef || pptWindowRef.closed) {
+        isNewWindow = true;
+        /* 恢復 left = window.screen.availWidth，讓 Firefox 可直接在副螢幕開啟並記憶副螢幕位置 */
+        const left = cachedOtherScreen ? cachedOtherScreen.availLeft : window.screen.availWidth;
+        const top = cachedOtherScreen ? cachedOtherScreen.availTop : 0;
+        const w = cachedOtherScreen ? cachedOtherScreen.availWidth : window.screen.availWidth;
+        const h = cachedOtherScreen ? cachedOtherScreen.availHeight : window.screen.availHeight;
+
+        const features = 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+        pptWindowRef = window.open('', 'ChurchProjectorPopup_v3', features);
+      }
+
+      if (pptWindowRef) {
+        try {
+          const frame = ensureProjectorShell(pptWindowRef, isNewWindow);
+          const standby = pptWindowRef.document.getElementById('standbyOverlay');
+          if (standby) standby.style.display = 'none';
+          updateBlackoutButtonUI(false);
+          frame.style.display = 'block';
+          frame.src = playUrl;
+          /* 僅在首次新開視窗時 focus 外層以支援直接按 F11，切換詩歌時不搶焦點 */
+          if (isNewWindow) {
+            pptWindowRef.focus();
+            try { pptWindowRef.document.body.focus(); } catch (e) {}
+          }
+        } catch (err) {
+          pptWindowRef.location.href = 'about:blank';
+          setTimeout(function() {
+            const frame = ensureProjectorShell(pptWindowRef, true);
+            updateBlackoutButtonUI(false);
+            frame.src = playUrl;
+          }, 150);
+        }
+      } else {
+        alert('彈出視窗被攔截！請點擊瀏覽器網址列右方的「攔截圖示」，選擇「永遠允許彈出式視窗」。');
+      }
+      
+      return false;
+    }
+
+    /**
+     * 更新控制台「投影黑屏待機」按鈕的視覺狀態
+     */
+    function updateBlackoutButtonUI(isBlackout) {
+      const btn = document.getElementById('blackoutBtn');
+      if (!btn) return;
+      if (isBlackout) {
+        btn.className = (currentRole === 'av' && IS_ADMIN ? '' : 'hidden ') + 'px-3 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all flex items-center gap-1.5 ring-2 ring-amber-300';
+        btn.innerHTML = '<i class="fa-solid fa-eye"></i> 解除黑屏 (恢復畫面)';
+      } else {
+        btn.className = (currentRole === 'av' && IS_ADMIN ? '' : 'hidden ') + 'px-3 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-black text-white shadow-sm transition-all flex items-center gap-1.5';
+        btn.innerHTML = '<i class="fa-solid fa-tv"></i> 投影黑屏待機';
+      }
+    }
+
+    /**
+     * 切換副螢幕全黑待機畫面（按一下啟用黑屏，再按一下恢復原本投影片，不關閉視窗、不退出全螢幕）
+     */
+    function blackoutProjectorScreen() {
+      if (!pptWindowRef || pptWindowRef.closed) {
+        alert('目前尚未開啟副螢幕投影視窗！請先點擊任一首詩歌開啟投影視窗。');
+        return;
+      }
+      try {
+        ensureProjectorShell(pptWindowRef, false);
+        const standby = pptWindowRef.document.getElementById('standbyOverlay');
+        if (!standby) return;
+        const isCurrentlyBlack = (standby.style.display === 'flex');
+        if (isCurrentlyBlack) {
+          standby.style.display = 'none';
+          updateBlackoutButtonUI(false);
+        } else {
+          standby.style.display = 'flex';
+          updateBlackoutButtonUI(true);
+        }
+      } catch (e) {}
+    }
+
+    /**
+     * 開關「操作說明」彈窗
+     */
+    function toggleHelpModal(show) {
+      const modal = document.getElementById('helpModal');
+      if (!modal) return;
+      if (show) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        toggleHelpModal(false);
+      }
+    });
+
+    function initCharChips() {
+      const container = document.getElementById('charChipsContainer');
+      let html = `<button onclick="filterChar(0)" class="char-chip px-2.5 py-1 rounded-lg text-xs bg-purple-600 text-white chip-active">不限</button>`;
+      for(let i = 1; i <= 11; i++) {
+        html += `<button onclick="filterChar(${i})" class="char-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 text-slate-600">${i}字</button>`;
+      }
+      html += `<button onclick="filterChar(12)" class="char-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 text-slate-600">12字+</button>`;
+      container.innerHTML = html;
+    }
+
+    function switchRole(role) {
+      if (!IS_ADMIN) return;
+      currentRole = role;
+      const blackoutBtn = document.getElementById('blackoutBtn');
+      if (blackoutBtn) {
+        if (role === 'av') blackoutBtn.classList.remove('hidden');
+        else blackoutBtn.classList.add('hidden');
+      }
+      ['av', 'musician', 'congregation'].forEach(r => {
+        const btn = document.getElementById(`tab-${r}`);
+        btn.className = (r === role) 
+          ? "px-3 py-2 rounded-lg text-sm transition-all active-tab bg-white shadow-sm"
+          : "px-3 py-2 rounded-lg text-sm transition-all text-slate-600 hover:bg-slate-200";
+      });
+      render();
+    }
+
+    function filterCategory(cat) {
+      selectedCategory = cat;
+      document.querySelectorAll('.cat-chip').forEach(el => {
+        el.classList.remove('chip-active', 'bg-purple-600', 'text-white');
+        el.classList.add('bg-slate-100', 'text-slate-600');
+        if(el.innerText.trim() === (cat === 'ALL' ? '全部' : cat)) {
+          el.classList.add('chip-active', 'bg-purple-600', 'text-white');
+          el.classList.remove('bg-slate-100', 'text-slate-600');
+        }
+      });
+      render();
+    }
+
+    function filterChar(count) {
+      selectedCharCount = count;
+      document.querySelectorAll('.char-chip').forEach((el, idx) => {
+        el.classList.remove('chip-active', 'bg-purple-600', 'text-white');
+        el.classList.add('bg-slate-100', 'text-slate-600');
+        if(idx === count) {
+          el.classList.add('chip-active', 'bg-purple-600', 'text-white');
+          el.classList.remove('bg-slate-100', 'text-slate-600');
+        }
+      });
+      render();
+    }
+
+    function handleSearch() { render(); }
+
+    function render() {
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      const container = document.getElementById('resultsGrid');
+      container.innerHTML = '';
+
+      const filtered = allSongs.filter(song => {
+        if (selectedCategory !== 'ALL' && song.category !== selectedCategory) return false;
+        if (selectedCharCount > 0) {
+          if (selectedCharCount === 12) {
+            if (song.charCount < 12) return false;
+          } else {
+            if (Number(song.charCount) !== selectedCharCount) return false;
+          }
+        }
+        if (keyword) {
+          return song.title.toLowerCase().includes(keyword) || 
+                 song.number.toLowerCase().includes(keyword) || 
+                 song.lyrics.toLowerCase().includes(keyword);
+        }
+        return true;
+      });
+
+      document.getElementById('resultCount').innerText = `找到 ${filtered.length} 首詩歌`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">找不到符合條件的詩歌</div>`;
+        return;
+      }
+
+      filtered.forEach(song => {
+        const card = document.createElement('div');
+        card.className = "bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between space-y-3";
+
+        let headerHtml = `
+          <div class="flex justify-between items-center">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+              ${song.category || '詩歌'} ${song.number ? '#' + song.number : ''}
+            </span>
+            <span class="text-xs text-slate-400">${song.charCount} 字</span>
+          </div>
+          <h3 class="text-lg font-bold text-slate-800 leading-snug">${song.title}</h3>
+        `;
+
+        let bodyHtml = '';
+        if (currentRole === 'av' && IS_ADMIN) {
+          bodyHtml = `
+            ${headerHtml}
+            <p class="text-xs text-slate-500 line-clamp-2 bg-slate-50 p-2 rounded">${(song.lyrics || '無歌詞預覽').trim()}</p>
+            <button type="button" onclick="openPPTOnSecondScreen('${song.pptUrl}', event)" 
+                    class="${song.pptUrl ? 'bg-orange-500 hover:bg-orange-600' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 w-full">
+              <i class="fa-solid fa-file-powerpoint"></i> 開啟 PPT 簡報 (副螢幕)
+            </button>
+          `;
+        } else if (currentRole === 'musician' && IS_ADMIN) {
+          bodyHtml = `
+            ${headerHtml}
+            <div class="bg-amber-50 border border-amber-100 p-2.5 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+              <span><i class="fa-solid fa-book-open mr-1"></i> 歌譜位置：</span>
+              <span class="font-bold">${song.pdfNote || '第一頁'}</span>
+            </div>
+            <a href="${song.pdfUrl || '#'}" target="_blank" 
+               class="${song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2">
+              <i class="fa-solid fa-file-pdf"></i> 查看歌譜 (PDF)
+            </a>
+          `;
+        } else {
+          /* 會眾版：固定呈現純歌詞 */
+          bodyHtml = `
+            ${headerHtml}
+            <div class="bg-slate-50 p-3 rounded-xl text-sm text-slate-700 max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">${(song.lyrics || '暫無歌詞資料').trim()}</div>
+          `;
+        }
+
+        card.innerHTML = bodyHtml;
+        container.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>

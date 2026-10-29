@@ -1,0 +1,8 @@
+# Ignore everything by default
+**/**
+
+# Allow only the Apps Script project files in root
+!appsscript.json
+!Code.js
+!driveSync.js
+!Index.html

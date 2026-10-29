@@ -1,0 +1,19 @@
+# Ignore everything by default except project files
+/*
+
+# Tracked GAS & Repo files
+!.gitignore
+!.claspignore
+!.clasp.json
+!README.md
+!appsscript.json
+!Code.js
+!driveSync.js
+!Index.html
+
+# Never track secrets or environment files
+.env
+.env.*
+!.env.example
+.clasprc.json
+node_modules/
