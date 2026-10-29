@@ -246,18 +246,21 @@
      */
     function convertToDirectPlayUrl(rawUrl, slideNum) {
       if (!rawUrl) return '';
-      const page = (slideNum && Number(slideNum) >= 1) ? Math.floor(Number(slideNum)) : 1;
+      const hasExplicitSlide = (slideNum !== undefined && slideNum !== null && Number(slideNum) >= 1);
+      const page = hasExplicitSlide ? Math.floor(Number(slideNum)) : 1;
       const slideMatch = rawUrl.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
       if (slideMatch && slideMatch[1]) {
         let url = 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false';
-        if (page >= 1) {
-          url += '&slide=id.p' + page + '&_t=' + Date.now() + '#slide=id.p' + page;
+        if (hasExplicitSlide) {
+          url += '&slide=id.p' + page + '&_t=' + Date.now();
         }
         return url;
       }
       const driveMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
       if (driveMatch && driveMatch[1]) {
-        return 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview#page=' + page;
+        return hasExplicitSlide
+          ? ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview#page=' + page)
+          : ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview');
       }
       return rawUrl;
     }
@@ -304,8 +307,6 @@
 
         frame = doc.createElement('iframe');
         frame.id = 'pptFrame';
-        /* 設定 sandbox 允許腳本與同源，但不加 allow-popups，徹底阻擋簡報內失效的 http://slide.xml 彈出新視窗 */
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
         frame.setAttribute('allow', 'fullscreen; autoplay');
         frame.setAttribute('allowfullscreen', 'true');
         frame.style.cssText = 'border:0;width:100vw;height:100vh;display:block;background:#000;';
@@ -323,7 +324,6 @@
         standby.innerText = '';
         doc.body.appendChild(standby);
 
-        const isChromium = !!win.chrome;
         let guardDismissed = false;
 
         const enterPersistentFullscreen = function() {
@@ -334,66 +334,59 @@
           }
         };
 
-        /* 僅針對 Chrome 核心：在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保按 F11 必能觸發 requestFullscreen()，同時支援視窗狀態下點擊／滾輪翻頁 */
-        let focusGuard = null;
-        if (isChromium) {
-          focusGuard = doc.createElement('div');
-          focusGuard.id = 'fsFocusGuard';
-          focusGuard.title = '單擊翻下一頁（左側 1/4 回上一頁）｜雙擊或按 F11 進入全螢幕';
-          focusGuard.style.cssText = 'position:fixed;inset:0;z-index:8000;background:transparent;cursor:pointer;';
-          let clickTimer = null;
-          focusGuard.onclick = function(ev) {
-            try { doc.body.focus(); } catch (e) {}
-            if (clickTimer) win.clearTimeout(clickTimer);
-            const x = ev ? ev.clientX : (win.innerWidth / 2);
-            clickTimer = win.setTimeout(function() {
-              clickTimer = null;
-              if (x < win.innerWidth * 0.25) {
-                stepSlidePage(-1);
-              } else {
-                stepSlidePage(1);
-              }
-            }, 220);
-          };
-          focusGuard.ondblclick = function() {
-            if (clickTimer) {
-              win.clearTimeout(clickTimer);
-              clickTimer = null;
-            }
-            enterPersistentFullscreen();
-          };
-          let lastWheelTime = 0;
-          focusGuard.addEventListener('wheel', function(ev) {
-            ev.preventDefault();
-            const now = Date.now();
-            if (now - lastWheelTime < 300) return;
-            lastWheelTime = now;
-            if (ev.deltaY > 0) {
-              stepSlidePage(1);
-            } else if (ev.deltaY < 0) {
+        /* 在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保 Firefox 與 Chrome 按 F11 必能觸發 requestFullscreen()，同時支援視窗狀態下點擊／滾輪翻頁 */
+        const focusGuard = doc.createElement('div');
+        focusGuard.id = 'fsFocusGuard';
+        focusGuard.title = '單擊翻下一頁（左側 1/4 回上一頁）｜雙擊或按 F11 進入全螢幕';
+        focusGuard.style.cssText = 'position:fixed;inset:0;z-index:8000;background:transparent;cursor:pointer;';
+        let clickTimer = null;
+        focusGuard.onclick = function(ev) {
+          try { doc.body.focus(); } catch (e) {}
+          if (clickTimer) win.clearTimeout(clickTimer);
+          const x = ev ? ev.clientX : (win.innerWidth / 2);
+          clickTimer = win.setTimeout(function() {
+            clickTimer = null;
+            if (x < win.innerWidth * 0.25) {
               stepSlidePage(-1);
+            } else {
+              stepSlidePage(1);
             }
-          }, { passive: false });
-          doc.body.appendChild(focusGuard);
+          }, 220);
+        };
+        focusGuard.ondblclick = function() {
+          if (clickTimer) {
+            win.clearTimeout(clickTimer);
+            clickTimer = null;
+          }
+          enterPersistentFullscreen();
+        };
+        let lastWheelTime = 0;
+        focusGuard.addEventListener('wheel', function(ev) {
+          ev.preventDefault();
+          const now = Date.now();
+          if (now - lastWheelTime < 300) return;
+          lastWheelTime = now;
+          if (ev.deltaY > 0) {
+            stepSlidePage(1);
+          } else if (ev.deltaY < 0) {
+            stepSlidePage(-1);
+          }
+        }, { passive: false });
+        doc.body.appendChild(focusGuard);
 
-          frame.addEventListener('load', function() {
-            if (!doc.fullscreenElement && !guardDismissed) {
-              try { doc.body.focus(); } catch (e) {}
-            } else if (doc.fullscreenElement) {
-              try { frame.contentWindow.focus(); } catch (e) {}
-            }
-          });
-
-          win.setInterval(function() {
-            if (!doc.fullscreenElement && !guardDismissed && doc.activeElement === frame) {
-              try { doc.body.focus(); } catch (e) {}
-            }
-          }, 120);
-        } else {
-          frame.addEventListener('load', function() {
+        frame.addEventListener('load', function() {
+          if (!doc.fullscreenElement && !guardDismissed) {
+            try { doc.body.focus(); } catch (e) {}
+          } else if (doc.fullscreenElement) {
             try { frame.contentWindow.focus(); } catch (e) {}
-          });
-        }
+          }
+        });
+
+        win.setInterval(function() {
+          if (!doc.fullscreenElement && !guardDismissed && doc.activeElement === frame) {
+            try { doc.body.focus(); } catch (e) {}
+          }
+        }, 120);
 
         const bar = doc.createElement('div');
         bar.id = 'fsHelperBar';
@@ -459,14 +452,14 @@
         });
 
         const checkFsState = function() {
-          const isFs = !!doc.fullscreenElement || (!isChromium && (win.innerHeight >= win.screen.height - 6));
+          const isFs = !!doc.fullscreenElement;
           bar.style.display = (isFs || guardDismissed) ? 'none' : 'flex';
           if (focusGuard) {
-            focusGuard.style.display = (!!doc.fullscreenElement || guardDismissed) ? 'none' : 'block';
+            focusGuard.style.display = (isFs || guardDismissed) ? 'none' : 'block';
           }
-          if (doc.fullscreenElement) {
+          if (isFs) {
             try { frame.contentWindow.focus(); } catch (e) {}
-          } else if (isChromium && !guardDismissed) {
+          } else if (!guardDismissed) {
             try { doc.body.focus(); } catch (e) {}
           }
         };
@@ -671,7 +664,7 @@
       currentSlidePage = (initialPage && Number(initialPage) >= 1) ? Math.floor(Number(initialPage)) : 1;
       consoleRemoteDismissed = false;
 
-      const playUrl = convertToDirectPlayUrl(rawUrl, currentSlidePage);
+      const playUrl = convertToDirectPlayUrl(rawUrl, initialPage);
       let isNewWindow = false;
 
       if (!pptWindowRef || pptWindowRef.closed) {
