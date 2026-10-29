@@ -50,7 +50,10 @@
     <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 mb-6 space-y-4">
       <div class="relative">
         <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
-        <input type="text" id="searchInput" oninput="handleSearch()" placeholder="輸入歌名、第一句歌詞、編號或歌詞內文..." class="w-full pl-12 pr-4 py-3 text-lg border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+        <input type="text" id="searchInput" oninput="handleSearch()" placeholder="輸入歌名、第一句歌詞、編號或歌詞內文..." class="w-full pl-12 pr-11 py-3 text-lg border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+        <button type="button" id="clearSearchBtn" onclick="clearSearchInput()" class="hidden absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xl px-1 transition-colors cursor-pointer" title="清除搜尋文字">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </button>
       </div>
 
       <div>
@@ -835,7 +838,31 @@
       render();
     }
 
-    function handleSearch() { render(); }
+    function handleSearch() {
+      const input = document.getElementById('searchInput');
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn && input) {
+        if (input.value.length > 0) {
+          clearBtn.classList.remove('hidden');
+        } else {
+          clearBtn.classList.add('hidden');
+        }
+      }
+      render();
+    }
+
+    function clearSearchInput() {
+      const input = document.getElementById('searchInput');
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+      if (clearBtn) {
+        clearBtn.classList.add('hidden');
+      }
+      render();
+    }
 
     function render() {
       const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
