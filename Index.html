@@ -108,21 +108,21 @@
 
   <!-- 操作說明彈窗 Modal -->
   <div id="helpModal" onclick="if(event.target===this) toggleHelpModal(false)" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden">
-      <div class="bg-purple-700 text-white px-6 py-4 flex justify-between items-center">
+    <div class="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-100 overflow-hidden">
+      <div class="bg-purple-700 text-white px-6 py-3.5 flex justify-between items-center">
         <div class="flex items-center gap-2 font-bold text-lg">
           <i class="fa-solid fa-circle-question"></i>
           <span>影音同工投影操作指引</span>
         </div>
         <button type="button" onclick="toggleHelpModal(false)" class="text-purple-200 hover:text-white text-xl leading-none px-1">&times;</button>
       </div>
-      <div class="p-6 space-y-4 text-sm text-slate-700 max-h-[80vh] overflow-y-auto leading-relaxed">
-        <div class="bg-purple-50 border border-purple-100 rounded-xl p-4 space-y-1.5">
+      <div class="p-5 space-y-3 text-sm text-slate-700 max-h-[85vh] overflow-y-auto leading-relaxed">
+        <div class="bg-purple-50 border border-purple-100 rounded-xl p-3.5 space-y-1">
           <div class="font-bold text-purple-900 text-base">🎬 一、聚會前準備（每堂只需做 1 次）</div>
-          <ol class="list-decimal list-inside space-y-1.5 text-slate-700">
+          <ol class="list-decimal list-inside space-y-1 text-slate-700">
             <li><strong>開啟投影視窗</strong>：點擊第 1 首詩歌的 <span class="text-orange-600 font-semibold">「開啟 PPT 簡報 (副螢幕)」</span>。<span class="text-xs text-slate-500">（首次使用若被瀏覽器攔截，請於網址列右方選擇「永遠允許彈出式視窗」）</span></li>
             <li><strong>移至副螢幕並全螢幕</strong>：
-              <ul class="list-disc list-inside ml-4 mt-1 space-y-1.5 text-sm">
+              <ul class="list-disc list-inside ml-4 mt-1 space-y-1 text-sm">
                 <li><strong>Firefox（推薦）</strong>：視窗會自動在副螢幕開啟，點左下角 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs">⛶ 全螢幕</span> 或按 <kbd class="inline-block whitespace-nowrap px-1.5 py-0.5 bg-slate-200 rounded text-xs font-mono">F11</kbd> 即可。</li>
                 <li><strong>Chrome / Edge</strong>：將彈出視窗拖拉至副螢幕，點左下角 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs">⛶ 全螢幕</span>、按 <kbd class="inline-block whitespace-nowrap px-1.5 py-0.5 bg-slate-200 rounded text-xs font-mono">F11</kbd> 或<strong>雙擊畫面中央</strong>進入無邊框全螢幕。</li>
               </ul>
@@ -130,9 +130,9 @@
           </ol>
         </div>
 
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1.5">
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
           <div class="font-bold text-slate-900 text-base">🎵 二、聚會中切換詩歌、跳頁遙控與黑屏待機</div>
-          <ul class="list-disc list-inside space-y-1.5">
+          <ul class="list-disc list-inside space-y-1">
             <li><strong>換下一首詩歌</strong>：<span class="text-red-600 font-bold">聚會期間請勿按 ✕ 關閉副螢幕視窗！</span>直接在主螢幕點擊下一首詩歌按鈕，副螢幕就會<strong>保持在全螢幕狀態下直接切換簡報</strong>。</li>
             <li><strong>快速跳頁／翻頁遙控（自動偵測頁數）</strong>：
               <ul class="list-disc list-inside ml-4 mt-1 space-y-1 text-sm text-slate-600">
@@ -145,15 +145,15 @@
           </ul>
         </div>
 
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-1">
           <div class="font-bold text-amber-900 text-base">⚠️ 三、使用注意事項（系統限制）</div>
-          <ul class="list-disc list-inside space-y-1.5 text-amber-900/90">
+          <ul class="list-disc list-inside space-y-1 text-amber-900/90">
             <li><strong>請勿中途關閉投影視窗</strong>：受瀏覽器安全限制，若按 ✕ 關閉了副螢幕視窗，下次再開啟時視窗會重回主螢幕。請善用「📺 投影黑屏待機」代替關閉視窗。</li>
             <li><strong>簡報翻頁方式</strong>：除了點擊主螢幕底部或副螢幕右下角的頁碼導覽按鈕外，在副螢幕簡報點一下後，亦可用鍵盤方向鍵（<kbd class="inline-block px-1.5 bg-white border rounded text-xs">←</kbd> / <kbd class="inline-block px-1.5 bg-white border rounded text-xs">→</kbd> 或空白鍵）逐頁翻頁。</li>
           </ul>
         </div>
       </div>
-      <div class="bg-slate-50 px-6 py-3.5 border-t border-slate-100 flex justify-end">
+      <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-end">
         <button type="button" onclick="toggleHelpModal(false)" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl text-sm transition-all">我知道了</button>
       </div>
     </div>
