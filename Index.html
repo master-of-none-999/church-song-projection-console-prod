@@ -10,7 +10,7 @@
     .chip-active { background-color: #8b5cf6 !important; color: white !important; }
   </style>
 </head>
-<body class="bg-slate-50 min-h-screen pb-10">
+<body class="bg-slate-50 min-h-screen pb-28">
 
   <!-- 頁首與導覽列 -->
   <header class="bg-white shadow-sm sticky top-0 z-50">
@@ -80,6 +80,28 @@
     <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
   </main>
 
+  <!-- 主螢幕底部：正在投影頁碼遙控列 (方案 C) -->
+  <div id="consoleRemoteBar" class="hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-xs text-white border-t border-slate-700 shadow-2xl">
+    <div class="max-w-6xl mx-auto px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+      <div class="flex items-center gap-2.5 text-sm min-w-0 w-full sm:w-auto justify-center sm:justify-start">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-600 text-white shrink-0">
+          <i class="fa-solid fa-tower-broadcast animate-pulse"></i> 正在投影
+        </span>
+        <span id="remoteSongTitle" class="font-bold text-amber-300 truncate max-w-xs sm:max-w-md">—</span>
+        <span id="remotePageStatus" class="text-xs text-slate-300 shrink-0"></span>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-1.5 w-full sm:w-auto">
+        <button type="button" onclick="stepSlidePage(-1)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer" title="上一頁">
+          <i class="fa-solid fa-chevron-left"></i> 上頁
+        </button>
+        <div id="consolePageBtns" class="flex flex-wrap items-center justify-center gap-1"></div>
+        <button type="button" onclick="stepSlidePage(1)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer" title="下一頁">
+          下頁 <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 操作說明彈窗 Modal -->
   <div id="helpModal" onclick="if(event.target===this) toggleHelpModal(false)" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden">
@@ -105,9 +127,10 @@
         </div>
 
         <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1.5">
-          <div class="font-bold text-slate-900 text-base">🎵 二、聚會中切換詩歌與黑屏待機</div>
+          <div class="font-bold text-slate-900 text-base">🎵 二、聚會中切換詩歌、跳頁遙控與黑屏待機</div>
           <ul class="list-disc list-inside space-y-1.5">
             <li><strong>換下一首詩歌</strong>：<span class="text-red-600 font-bold">聚會期間請勿按 ✕ 關閉副螢幕視窗！</span>直接在主螢幕點擊下一首詩歌按鈕，副螢幕就會<strong>保持在全螢幕狀態下直接切換簡報</strong>。</li>
+            <li><strong>快速跳頁／翻頁遙控（自動偵測頁數）</strong>：開啟詩歌後，<strong>主螢幕底部</strong>與<strong>副螢幕右下角</strong>皆會自動產生對應頁數的 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs">1</span> <span class="inline-block whitespace-nowrap bg-slate-700 text-white px-1.5 py-0.5 rounded text-xs">2 (第2節)</span> 跳頁按鈕（滑鼠移至頁碼可預覽該頁歌詞）。點擊任一處頁碼即可直接跳至該頁！</li>
             <li><strong>暫停投影（講道／報告時）</strong>：點擊主螢幕右上角 <span class="inline-block whitespace-nowrap bg-slate-800 text-white px-2 py-0.5 rounded text-xs">📺 投影黑屏待機</span> 即可變全黑畫面；再按一下 <span class="inline-block whitespace-nowrap bg-amber-600 text-white px-2 py-0.5 rounded text-xs">👁️ 解除黑屏</span>（或點選下一首詩歌）即可瞬間恢復畫面。</li>
           </ul>
         </div>
@@ -116,7 +139,7 @@
           <div class="font-bold text-amber-900 text-base">⚠️ 三、使用注意事項（系統限制）</div>
           <ul class="list-disc list-inside space-y-1.5 text-amber-900/90">
             <li><strong>請勿中途關閉投影視窗</strong>：受瀏覽器安全限制，若按 ✕ 關閉了副螢幕視窗，下次再開啟時視窗會重回主螢幕。請善用「📺 投影黑屏待機」代替關閉視窗。</li>
-            <li><strong>簡報翻頁</strong>：在副螢幕簡報點一下後，即可用鍵盤方向鍵（<kbd class="inline-block px-1.5 bg-white border rounded text-xs">←</kbd> / <kbd class="inline-block px-1.5 bg-white border rounded text-xs">→</kbd> 或空白鍵）翻頁。</li>
+            <li><strong>簡報翻頁方式</strong>：除了點擊主螢幕底部或副螢幕右下角的頁碼按鈕外，在副螢幕簡報點一下後，亦可用鍵盤方向鍵（<kbd class="inline-block px-1.5 bg-white border rounded text-xs">←</kbd> / <kbd class="inline-block px-1.5 bg-white border rounded text-xs">→</kbd> 或空白鍵）逐頁翻頁。</li>
           </ul>
         </div>
       </div>
@@ -127,7 +150,7 @@
   </div>
 
   <script>
-    // 精準字串比對，徹底防止 'false' 被誤判為 true
+    /* 精準字串比對，徹底防止 'false' 被誤判為 true */
     const IS_ADMIN = ("<?= isAdmin ?>" === "true");
     
     let allSongs = [];
@@ -136,6 +159,10 @@
     let selectedCharCount = 0;
     let cachedOtherScreen = null;
     let pptWindowRef = null;
+    let currentProjectedSong = null;
+    let currentSlidePage = 1;
+    let currentSlideInfo = null;
+    const slideInfoCache = {};
 
     /**
      * 預先快取副螢幕資訊（避免在點擊開啟 PPT 當下使用 async/await 導致喪失 User Gesture Activation）
@@ -152,11 +179,11 @@
         updateCachedScreen();
         screenDetails.addEventListener('screenschange', updateCachedScreen);
       } catch (err) {
-        // GAS 雙層沙盒 iframe 可能會阻擋 window-management 權限，靜默降級即可
+        /* GAS 雙層沙盒 iframe 可能會阻擋 window-management 權限，靜默降級即可 */
       }
     }
 
-    // 在首次點擊頁面時嘗試預先快取多重螢幕資訊
+    /* 在首次點擊頁面時嘗試預先快取多重螢幕資訊 */
     document.addEventListener('click', preCacheScreenDetails, { once: true });
 
     let appInitialized = false;
@@ -203,21 +230,52 @@
     window.addEventListener('load', initApp);
 
     /**
-     * 轉換為直接放映網址
+     * 轉換為直接放映網址（支援指定跳頁 slideNum，例如 id.p3 代表第 3 頁）
      */
-    function convertToDirectPlayUrl(rawUrl) {
+    function convertToDirectPlayUrl(rawUrl, slideNum) {
       if (!rawUrl) return '';
-      // 1. Google Slides 轉為無邊框自動放映模式
+      const page = (slideNum && Number(slideNum) >= 1) ? Math.floor(Number(slideNum)) : 1;
       const slideMatch = rawUrl.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
       if (slideMatch && slideMatch[1]) {
-        return 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false';
+        let url = 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false';
+        if (page >= 1) {
+          url += '&slide=id.p' + page + '&_t=' + Date.now() + '#slide=id.p' + page;
+        }
+        return url;
       }
-      // 2. Google Drive 檔案轉為預覽模式
       const driveMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
       if (driveMatch && driveMatch[1]) {
-        return 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview';
+        return 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview#page=' + page;
       }
       return rawUrl;
+    }
+
+    /**
+     * 當後端尚未回傳真實簡報結構前，先以歌詞段落快速產生預設頁碼結構
+     */
+    function buildFallbackSlideInfo(rawUrl, lyrics) {
+      const text = String(lyrics || '').trim();
+      let stanzas = text ? text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean) : [];
+      if (stanzas.length <= 1 && text) {
+        const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
+        if (lines.length > 4) {
+          stanzas = [];
+          for (let i = 0; i < lines.length; i += 4) {
+            stanzas.push(lines.slice(i, i + 4).join(' '));
+          }
+        }
+      }
+      const total = Math.max(1, Math.min(20, stanzas.length || 4));
+      const pages = [];
+      for (let p = 1; p <= total; p++) {
+        pages.push({
+          page: p,
+          slideId: 'p' + p,
+          verseLabel: '',
+          snippet: stanzas[p - 1] ? stanzas[p - 1].substring(0, 36) : ('第 ' + p + ' 頁')
+        });
+      }
+      return { totalPages: total, pages: pages };
     }
 
     /**
@@ -234,14 +292,22 @@
 
         frame = doc.createElement('iframe');
         frame.id = 'pptFrame';
+        /* 設定 sandbox 允許腳本與同源，但不加 allow-popups，徹底阻擋簡報內失效的 http://slide.xml 彈出新視窗 */
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
         frame.setAttribute('allow', 'fullscreen; autoplay');
         frame.setAttribute('allowfullscreen', 'true');
         frame.style.cssText = 'border:0;width:100vw;height:100vh;display:block;background:#000;';
         doc.body.appendChild(frame);
 
+        /* 副螢幕右下角：自訂頁碼快速跳頁導覽列（直接覆蓋原本簡報右下角失效的 1|2|3|4 連結區） */
+        const navBar = doc.createElement('div');
+        navBar.id = 'pptPageNavBar';
+        navBar.style.cssText = 'position:fixed;bottom:8px;right:12px;z-index:9500;display:none;align-items:center;gap:5px;background:rgba(15,23,42,0.92);color:#fff;border:1px solid rgba(255,255,255,0.28);padding:6px 10px;border-radius:12px;font-family:sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.55);user-select:none;';
+        doc.body.appendChild(navBar);
+
         const standby = doc.createElement('div');
         standby.id = 'standbyOverlay';
-        standby.style.cssText = 'display:none;position:fixed;inset:0;z-index:5000;background:#000;color:#475569;align-items:center;justify-content:center;font-family:sans-serif;font-size:18px;user-select:none;';
+        standby.style.cssText = 'display:none;position:fixed;inset:0;z-index:9800;background:#000;color:#475569;align-items:center;justify-content:center;font-family:sans-serif;font-size:18px;user-select:none;';
         standby.innerText = '';
         doc.body.appendChild(standby);
 
@@ -284,6 +350,10 @@
               try { doc.body.focus(); } catch (e) {}
             }
           }, 120);
+        } else {
+          frame.addEventListener('load', function() {
+            try { frame.contentWindow.focus(); } catch (e) {}
+          });
         }
 
         const bar = doc.createElement('div');
@@ -357,9 +427,143 @@
     }
 
     /**
+     * 同步渲染「主螢幕底部遙控列」與「副螢幕右下角導覽列」的頁碼按鈕
+     */
+    function renderSlideRemoteBars() {
+      const consoleBar = document.getElementById('consoleRemoteBar');
+      const consoleBtns = document.getElementById('consolePageBtns');
+      const titleEl = document.getElementById('remoteSongTitle');
+      const statusEl = document.getElementById('remotePageStatus');
+
+      if (!currentProjectedSong || !currentSlideInfo) {
+        if (consoleBar) consoleBar.classList.add('hidden');
+        return;
+      }
+
+      if (IS_ADMIN && currentRole === 'av') {
+        consoleBar.classList.remove('hidden');
+      } else {
+        consoleBar.classList.add('hidden');
+      }
+
+      const total = currentSlideInfo.totalPages || 1;
+      const pages = currentSlideInfo.pages || [];
+      if (titleEl) {
+        const prefix = currentProjectedSong.number ? ('#' + currentProjectedSong.number + ' ') : '';
+        titleEl.innerText = prefix + (currentProjectedSong.title || '詩歌');
+      }
+      if (statusEl) {
+        statusEl.innerText = '（第 ' + currentSlidePage + ' / ' + total + ' 頁）';
+      }
+
+      /* 1. 更新主螢幕底部按鈕 */
+      if (consoleBtns) {
+        consoleBtns.innerHTML = '';
+        pages.forEach(function(pObj) {
+          const p = pObj.page;
+          const isActive = (p === currentSlidePage);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = isActive
+            ? 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-purple-600 text-white ring-2 ring-purple-300 shadow-sm transition-all cursor-pointer'
+            : 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-all cursor-pointer';
+          btn.innerText = pObj.verseLabel ? (p + ' (' + pObj.verseLabel + ')') : String(p);
+          if (pObj.snippet) {
+            btn.title = '第 ' + p + ' 頁：' + pObj.snippet;
+          }
+          btn.onclick = function() {
+            jumpToSlidePage(p);
+          };
+          consoleBtns.appendChild(btn);
+        });
+      }
+
+      /* 2. 更新副螢幕右下角導覽列按鈕 */
+      if (pptWindowRef && !pptWindowRef.closed) {
+        try {
+          const pDoc = pptWindowRef.document;
+          const navBar = pDoc.getElementById('pptPageNavBar');
+          if (navBar) {
+            navBar.innerHTML = '';
+            navBar.style.display = 'flex';
+
+            const makeProjBtn = function(label, titleText, isActive, onClickFn) {
+              const b = pDoc.createElement('button');
+              b.type = 'button';
+              b.innerText = label;
+              if (titleText) b.title = titleText;
+              b.style.cssText = isActive
+                ? 'background:#7c3aed;color:#fff;border:1px solid #c4b5fd;padding:4px 10px;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 0 8px rgba(124,58,237,0.6);'
+                : 'background:rgba(30,41,59,0.9);color:#e2e8f0;border:1px solid rgba(255,255,255,0.22);padding:4px 9px;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;';
+              b.onclick = function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                onClickFn();
+              };
+              return b;
+            };
+
+            navBar.appendChild(makeProjBtn('◀', '上一頁', false, function() {
+              stepSlidePage(-1);
+            }));
+
+            pages.forEach(function(pObj) {
+              const p = pObj.page;
+              const isActive = (p === currentSlidePage);
+              const tipText = pObj.snippet ? ('第 ' + p + ' 頁：' + pObj.snippet) : ('跳至第 ' + p + ' 頁');
+              navBar.appendChild(makeProjBtn(String(p), tipText, isActive, function() {
+                jumpToSlidePage(p);
+              }));
+            });
+
+            navBar.appendChild(makeProjBtn('►', '下一頁', false, function() {
+              stepSlidePage(1);
+            }));
+          }
+        } catch (e) {}
+      }
+    }
+
+    /**
+     * 直接跳轉至目前投影片的指定頁碼（保持全螢幕不跳出）
+     */
+    function jumpToSlidePage(pageNum) {
+      if (!currentProjectedSong || !currentProjectedSong.pptUrl) return;
+      const total = (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : 1;
+      const targetPage = Math.max(1, Math.min(total, Math.floor(Number(pageNum) || 1)));
+      currentSlidePage = targetPage;
+
+      const playUrl = convertToDirectPlayUrl(currentProjectedSong.pptUrl, targetPage);
+      if (pptWindowRef && !pptWindowRef.closed) {
+        try {
+          const frame = ensureProjectorShell(pptWindowRef, false);
+          const standby = pptWindowRef.document.getElementById('standbyOverlay');
+          if (standby) standby.style.display = 'none';
+          updateBlackoutButtonUI(false);
+          frame.style.display = 'block';
+          frame.src = playUrl;
+        } catch (e) {}
+      } else {
+        openPPTOnSecondScreen(currentProjectedSong.pptUrl, null, currentProjectedSong.id, targetPage);
+        return;
+      }
+      renderSlideRemoteBars();
+    }
+
+    /**
+     * 上一頁 / 下一頁切換
+     */
+    function stepSlidePage(delta) {
+      if (!currentProjectedSong) return;
+      const total = (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : 1;
+      const next = Math.max(1, Math.min(total, currentSlidePage + Number(delta || 0)));
+      jumpToSlidePage(next);
+    }
+
+    /**
      * 同步執行開啟視窗（嚴禁使用 async/await，確保 100% 觸發獨立新視窗而非 Tab）
      */
-    function openPPTOnSecondScreen(rawUrl, event) {
+    function openPPTOnSecondScreen(rawUrl, event, songId, initialPage) {
       if (!rawUrl || rawUrl === '#' || rawUrl === '') {
         alert('此詩歌尚未設定 PPT 連結！');
         return false;
@@ -370,7 +574,13 @@
         event.stopPropagation();
       }
 
-      const playUrl = convertToDirectPlayUrl(rawUrl);
+      const matchedSong = allSongs.find(function(s) {
+        return (songId && s.id === songId) || s.pptUrl === rawUrl;
+      });
+      currentProjectedSong = matchedSong || { id: songId || 0, title: '詩歌簡報', number: '', pptUrl: rawUrl, lyrics: '' };
+      currentSlidePage = (initialPage && Number(initialPage) >= 1) ? Math.floor(Number(initialPage)) : 1;
+
+      const playUrl = convertToDirectPlayUrl(rawUrl, currentSlidePage);
       let isNewWindow = false;
 
       if (!pptWindowRef || pptWindowRef.closed) {
@@ -404,10 +614,35 @@
             const frame = ensureProjectorShell(pptWindowRef, true);
             updateBlackoutButtonUI(false);
             frame.src = playUrl;
+            renderSlideRemoteBars();
           }, 150);
         }
       } else {
         alert('彈出視窗被攔截！請點擊瀏覽器網址列右方的「攔截圖示」，選擇「永遠允許彈出式視窗」。');
+      }
+
+      /* 立即以快取或預設段落顯示頁碼按鈕，隨後背景讀取真實 .ppt 總頁數與節數標記並自動更新 */
+      if (slideInfoCache[rawUrl]) {
+        currentSlideInfo = slideInfoCache[rawUrl];
+        renderSlideRemoteBars();
+      } else {
+        currentSlideInfo = buildFallbackSlideInfo(rawUrl, currentProjectedSong.lyrics);
+        renderSlideRemoteBars();
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          const targetUrl = rawUrl;
+          google.script.run
+            .withSuccessHandler(function(info) {
+              if (info && info.totalPages) {
+                slideInfoCache[targetUrl] = info;
+                if (currentProjectedSong && currentProjectedSong.pptUrl === targetUrl) {
+                  currentSlideInfo = info;
+                  if (currentSlidePage > info.totalPages) currentSlidePage = info.totalPages;
+                  renderSlideRemoteBars();
+                }
+              }
+            })
+            .getPresentationSlideInfo(rawUrl, currentProjectedSong.lyrics || '');
+        }
       }
       
       return false;
@@ -490,6 +725,7 @@
         if (role === 'av') blackoutBtn.classList.remove('hidden');
         else blackoutBtn.classList.add('hidden');
       }
+      renderSlideRemoteBars();
       ['av', 'musician', 'congregation'].forEach(r => {
         const btn = document.getElementById(`tab-${r}`);
         btn.className = (r === role) 
@@ -575,8 +811,8 @@
           bodyHtml = `
             ${headerHtml}
             <p class="text-xs text-slate-500 line-clamp-2 bg-slate-50 p-2 rounded">${(song.lyrics || '無歌詞預覽').trim()}</p>
-            <button type="button" onclick="openPPTOnSecondScreen('${song.pptUrl}', event)" 
-                    class="${song.pptUrl ? 'bg-orange-500 hover:bg-orange-600' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 w-full">
+            <button type="button" onclick="openPPTOnSecondScreen('${song.pptUrl}', event, ${song.id})" 
+                    class="${song.pptUrl ? 'bg-orange-500 hover:bg-orange-600' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 w-full cursor-pointer">
               <i class="fa-solid fa-file-powerpoint"></i> 開啟 PPT 簡報 (副螢幕)
             </button>
           `;
