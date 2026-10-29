@@ -98,6 +98,10 @@
         <button type="button" onclick="stepSlidePage(1)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer" title="下一頁">
           下頁 <i class="fa-solid fa-chevron-right"></i>
         </button>
+        <span class="hidden sm:inline-block w-px h-5 bg-slate-700 mx-0.5"></span>
+        <button type="button" onclick="dismissConsoleRemoteBar()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white border border-slate-600 hover:border-red-500 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer" title="關閉底部遙控列">
+          <i class="fa-solid fa-xmark"></i> 關閉
+        </button>
       </div>
     </div>
   </div>
@@ -162,6 +166,8 @@
     let currentProjectedSong = null;
     let currentSlidePage = 1;
     let currentSlideInfo = null;
+    let consoleRemoteDismissed = false;
+    let projectorWatchTimer = null;
     const slideInfoCache = {};
 
     /**
@@ -422,8 +428,47 @@
         };
         doc.addEventListener('fullscreenchange', checkFsState);
         win.addEventListener('resize', checkFsState);
+        win.addEventListener('pagehide', function() {
+          setTimeout(checkProjectorWindowClosed, 100);
+        });
+        win.addEventListener('beforeunload', function() {
+          setTimeout(checkProjectorWindowClosed, 100);
+        });
       }
       return frame;
+    }
+
+    /**
+     * 手動關閉主螢幕底部的常駐遙控列
+     */
+    function dismissConsoleRemoteBar() {
+      consoleRemoteDismissed = true;
+      const consoleBar = document.getElementById('consoleRemoteBar');
+      if (consoleBar) consoleBar.classList.add('hidden');
+    }
+
+    /**
+     * 偵測副螢幕視窗是否已被關閉，若已關閉則自動隱藏主螢幕底部遙控列並重置黑屏按鈕
+     */
+    function checkProjectorWindowClosed() {
+      if (!pptWindowRef || pptWindowRef.closed) {
+        if (projectorWatchTimer) {
+          clearInterval(projectorWatchTimer);
+          projectorWatchTimer = null;
+        }
+        pptWindowRef = null;
+        updateBlackoutButtonUI(false);
+        const consoleBar = document.getElementById('consoleRemoteBar');
+        if (consoleBar) consoleBar.classList.add('hidden');
+      }
+    }
+
+    /**
+     * 啟動副螢幕視窗存活偵測器（每 0.5 秒檢查一次，視窗關閉即自動收起底部遙控列）
+     */
+    function startProjectorWindowWatcher() {
+      if (projectorWatchTimer) clearInterval(projectorWatchTimer);
+      projectorWatchTimer = setInterval(checkProjectorWindowClosed, 500);
     }
 
     /**
@@ -435,12 +480,13 @@
       const titleEl = document.getElementById('remoteSongTitle');
       const statusEl = document.getElementById('remotePageStatus');
 
-      if (!currentProjectedSong || !currentSlideInfo) {
+      const isProjectorOpen = !!(pptWindowRef && !pptWindowRef.closed);
+      if (!currentProjectedSong || !currentSlideInfo || !isProjectorOpen) {
         if (consoleBar) consoleBar.classList.add('hidden');
         return;
       }
 
-      if (IS_ADMIN && currentRole === 'av') {
+      if (IS_ADMIN && currentRole === 'av' && !consoleRemoteDismissed) {
         consoleBar.classList.remove('hidden');
       } else {
         consoleBar.classList.add('hidden');
@@ -579,6 +625,7 @@
       });
       currentProjectedSong = matchedSong || { id: songId || 0, title: '詩歌簡報', number: '', pptUrl: rawUrl, lyrics: '' };
       currentSlidePage = (initialPage && Number(initialPage) >= 1) ? Math.floor(Number(initialPage)) : 1;
+      consoleRemoteDismissed = false;
 
       const playUrl = convertToDirectPlayUrl(rawUrl, currentSlidePage);
       let isNewWindow = false;
@@ -596,6 +643,7 @@
       }
 
       if (pptWindowRef) {
+        startProjectorWindowWatcher();
         try {
           const frame = ensureProjectorShell(pptWindowRef, isNewWindow);
           const standby = pptWindowRef.document.getElementById('standbyOverlay');
