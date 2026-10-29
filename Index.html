@@ -459,8 +459,8 @@
       /* 1. 更新主螢幕底部按鈕 */
       if (consoleBtns) {
         consoleBtns.innerHTML = '';
-        pages.forEach(function(pObj) {
-          const p = pObj.page;
+        pages.forEach(function(pObj, idx) {
+          const p = pObj.page || pObj.pageNum || (idx + 1);
           const isActive = (p === currentSlidePage);
           const btn = document.createElement('button');
           btn.type = 'button';
@@ -507,8 +507,8 @@
               stepSlidePage(-1);
             }));
 
-            pages.forEach(function(pObj) {
-              const p = pObj.page;
+            pages.forEach(function(pObj, idx) {
+              const p = pObj.page || pObj.pageNum || (idx + 1);
               const isActive = (p === currentSlidePage);
               const tipText = pObj.snippet ? ('第 ' + p + ' 頁：' + pObj.snippet) : ('跳至第 ' + p + ' 頁');
               navBar.appendChild(makeProjBtn(String(p), tipText, isActive, function() {

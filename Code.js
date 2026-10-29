@@ -1,7 +1,7 @@
 function doGet(e) {
-  // 預設強制為 false，只有當網址明確傳入 ?pass=admin 時才開啟同工權限
+  // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
   let isAdmin = false;
-  if (e && e.parameter && e.parameter.pass === 'admin') {
+  if (e && e.parameter && (e.parameter.pass === 'admin' || e.parameter.mode === 'admin')) {
     isAdmin = true;
   }
 
@@ -233,9 +233,10 @@ function getPresentationSlideInfo(pptUrl, fallbackLyrics) {
   for (let p = 1; p <= totalPages; p++) {
     const vIdx = verseTargets.indexOf(p);
     pages.push({
+      page: p,
       pageNum: p,
       pageId: 'p' + p,
-      verseLabel: vIdx !== -1 ? String(vIdx + 1) : '',
+      verseLabel: (hasMultiPageVerses && vIdx !== -1) ? ('第' + (vIdx + 1) + '節') : '',
       snippet: slideSnippets[p - 1] || ''
     });
   }
