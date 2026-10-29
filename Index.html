@@ -329,12 +329,12 @@
         const enterPersistentFullscreen = function() {
           if (doc.documentElement.requestFullscreen) {
             doc.documentElement.requestFullscreen().then(function() {
-              try { frame.contentWindow.focus(); } catch (e) {}
+              try { doc.body.focus(); } catch (e) {}
             }).catch(function() {});
           }
         };
 
-        /* 在進入全螢幕前防止跨域 iframe 搶走鍵盤焦點，確保 Firefox 與 Chrome 按 F11 必能觸發 requestFullscreen()，同時支援視窗狀態下點擊／滾輪翻頁 */
+        /* 全天候透明互動控制層：無論在「視窗模式」或「全螢幕模式」，統一攔截滑鼠單擊／滾輪與鍵盤事件並驅動翻頁，讓主副螢幕頁碼面板 100% 即時同步更新 */
         const focusGuard = doc.createElement('div');
         focusGuard.id = 'fsFocusGuard';
         focusGuard.title = '單擊翻下一頁（左側 1/4 回上一頁）｜雙擊或按 F11 進入全螢幕';
@@ -358,7 +358,9 @@
             win.clearTimeout(clickTimer);
             clickTimer = null;
           }
-          enterPersistentFullscreen();
+          if (!doc.fullscreenElement) {
+            enterPersistentFullscreen();
+          }
         };
         let lastWheelTime = 0;
         focusGuard.addEventListener('wheel', function(ev) {
@@ -375,15 +377,11 @@
         doc.body.appendChild(focusGuard);
 
         frame.addEventListener('load', function() {
-          if (!doc.fullscreenElement && !guardDismissed) {
-            try { doc.body.focus(); } catch (e) {}
-          } else if (doc.fullscreenElement) {
-            try { frame.contentWindow.focus(); } catch (e) {}
-          }
+          try { doc.body.focus(); } catch (e) {}
         });
 
         win.setInterval(function() {
-          if (!doc.fullscreenElement && !guardDismissed && doc.activeElement === frame) {
+          if (doc.activeElement === frame) {
             try { doc.body.focus(); } catch (e) {}
           }
         }, 120);
@@ -412,13 +410,12 @@
         closeTipBtn.onclick = function() {
           guardDismissed = true;
           bar.style.display = 'none';
-          if (focusGuard) focusGuard.style.display = 'none';
         };
         bar.appendChild(closeTipBtn);
 
         doc.body.appendChild(bar);
 
-        /* 攔截鍵盤 F11（轉為呼叫 requestFullscreen()），並在視窗狀態下同步支援方向鍵／空白鍵／數字鍵翻頁 */
+        /* 攔截鍵盤 F11（轉為呼叫 requestFullscreen()），並在視窗與全螢幕狀態下統一支援方向鍵／空白鍵／數字鍵翻頁與頁碼同步 */
         const handleKeyDown = function(e) {
           if (e.key === 'F11' || e.keyCode === 122) {
             e.preventDefault();
@@ -444,24 +441,14 @@
         win.addEventListener('keydown', handleKeyDown, true);
         doc.addEventListener('keydown', handleKeyDown, true);
 
-        /* 拖拉視窗標題列至副螢幕時，保持外層 body 焦點以便直接按 F11 觸發不跳出全螢幕 */
         win.addEventListener('focus', function() {
-          if (!doc.fullscreenElement) {
-            try { doc.body.focus(); } catch (e) {}
-          }
+          try { doc.body.focus(); } catch (e) {}
         });
 
         const checkFsState = function() {
           const isFs = !!doc.fullscreenElement;
           bar.style.display = (isFs || guardDismissed) ? 'none' : 'flex';
-          if (focusGuard) {
-            focusGuard.style.display = (isFs || guardDismissed) ? 'none' : 'block';
-          }
-          if (isFs) {
-            try { frame.contentWindow.focus(); } catch (e) {}
-          } else if (!guardDismissed) {
-            try { doc.body.focus(); } catch (e) {}
-          }
+          try { doc.body.focus(); } catch (e) {}
         };
         doc.addEventListener('fullscreenchange', checkFsState);
         win.addEventListener('resize', checkFsState);
