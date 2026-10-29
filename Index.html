@@ -197,7 +197,7 @@
     const INITIAL_SETLIST = "<?= initialSetlist ?>";
     const MAX_SETLIST_SIZE = 10;
     const SETLIST_STORAGE_KEY = 'church_worship_setlist_v1';
-    const DEFAULT_WEBAPP_EXEC_URL = 'https://script.google.com/a/macros/johnnyworks.biz/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec';
+    const DEFAULT_WEBAPP_EXEC_URL = 'https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec';
     
     let allSongs = [];
     let currentRole = IS_ADMIN ? 'av' : 'congregation'; 
@@ -267,8 +267,12 @@
     function getSetlistShareUrl() {
       let baseUrl = DEFAULT_WEBAPP_EXEC_URL;
       try {
-        if (document.referrer && document.referrer.indexOf('script.google.com') !== -1 && document.referrer.indexOf('/exec') !== -1) {
-          baseUrl = document.referrer.split('?')[0];
+        const parentRef = (window.parent && window.parent !== window && window.parent.document) ? window.parent.document.referrer : '';
+        const ref = (parentRef && parentRef.indexOf('script.google.com') !== -1 && parentRef.indexOf('/exec') !== -1)
+          ? parentRef
+          : document.referrer;
+        if (ref && ref.indexOf('script.google.com') !== -1 && ref.indexOf('/exec') !== -1) {
+          baseUrl = ref.split('?')[0];
         }
       } catch (e) {}
       return baseUrl + '?pass=admin&setlist=' + setlistSongIds.join(',');
