@@ -83,7 +83,10 @@
           <span id="setlistCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200/80 text-amber-900">0 / 10 首</span>
           <span id="setlistEmptyHint" class="text-xs text-amber-700/90">點擊下方詩歌卡片右上角的「📌 釘選」即可預先排定當日崇拜詩歌（最多 10 首）</span>
         </div>
-        <div id="setlistHeaderActions" class="hidden items-center gap-2 self-end sm:self-auto">
+        <div id="setlistHeaderActions" class="hidden flex-wrap items-center gap-2 self-end sm:self-auto">
+          <button type="button" id="copySetlistLinkBtn" onclick="copySetlistShareLink()" class="px-3 py-1 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer" title="複製今日崇拜歌單專屬連結，可直接傳給影音同工與樂手">
+            <i class="fa-solid fa-link" id="copySetlistLinkIcon"></i> <span id="copySetlistLinkText">複製歌單連結</span>
+          </button>
           <button type="button" id="toggleSetlistBtn" onclick="toggleSetlistCollapse()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 transition-all flex items-center gap-1 cursor-pointer">
             <i class="fa-solid fa-chevron-up" id="toggleSetlistIcon"></i> <span id="toggleSetlistText">收合</span>
           </button>
@@ -145,7 +148,7 @@
         <div class="bg-purple-50 border border-purple-100 rounded-xl p-3.5 space-y-1">
           <div class="font-bold text-purple-900 text-base">🎬 一、聚會前準備（每堂只需做 1 次）</div>
           <ol class="list-decimal list-inside space-y-1 text-slate-700">
-            <li><strong>預排今日崇拜歌單（選用）</strong>：點選詩歌卡片右上角的 <span class="inline-block whitespace-nowrap bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded text-xs font-semibold">📌 釘選</span>，即可將當日最多 <strong>10 首</strong>詩歌釘選至上方「<strong>今日崇拜歌單</strong>」專區並自由調整順序。</li>
+            <li><strong>預排今日崇拜歌單（選用）</strong>：點選詩歌卡片右上角的 <span class="inline-block whitespace-nowrap bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded text-xs font-semibold">📌 釘選</span>，即可將當日最多 <strong>10 首</strong>詩歌釘選至上方「<strong>今日崇拜歌單</strong>」專區並自由調整順序；主席亦可點擊 <span class="inline-block whitespace-nowrap bg-purple-600 text-white px-1.5 py-0.5 rounded text-xs font-semibold">🔗 複製歌單連結</span> 直接傳給影音同工與樂手一鍵載入。</li>
             <li><strong>開啟投影視窗</strong>：點擊第 1 首詩歌的 <span class="text-orange-600 font-semibold">「開啟 PPT 簡報 (副螢幕)」</span>。<span class="text-xs text-slate-500">（首次使用若被瀏覽器攔截，請於網址列右方選擇「永遠允許彈出式視窗」）</span></li>
             <li><strong>移至副螢幕並全螢幕</strong>：
               <ul class="list-disc list-inside ml-4 mt-1 space-y-1 text-sm">
@@ -188,8 +191,10 @@
   <script>
     /* 精準字串比對，徹底防止 'false' 被誤判為 true */
     const IS_ADMIN = ("<?= isAdmin ?>" === "true");
+    const INITIAL_SETLIST = "<?= initialSetlist ?>";
     const MAX_SETLIST_SIZE = 10;
     const SETLIST_STORAGE_KEY = 'church_worship_setlist_v1';
+    const DEFAULT_WEBAPP_EXEC_URL = 'https://script.google.com/a/macros/johnnyworks.biz/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec';
     
     let allSongs = [];
     let currentRole = IS_ADMIN ? 'av' : 'congregation'; 
@@ -204,9 +209,36 @@
     let projectorWatchTimer = null;
     let setlistSongIds = [];
     let setlistCollapsed = false;
+    let copyLinkFeedbackTimer = null;
     const slideInfoCache = {};
 
+    function syncUrlWithSetlist() {
+      if (typeof google !== 'undefined' && google.script && google.script.history) {
+        try {
+          const params = { pass: 'admin' };
+          if (setlistSongIds.length > 0) {
+            params.setlist = setlistSongIds.join(',');
+          }
+          google.script.history.replace(null, params, '');
+        } catch (e) {}
+      }
+    }
+
     function loadSetlistFromStorage() {
+      /* 若網址帶有 ?setlist=1,4,6 參數（例如主席傳給影音同工的歌單連結），優先載入網址歌單並寫入本機記憶 */
+      if (INITIAL_SETLIST && INITIAL_SETLIST.trim() !== '') {
+        const fromUrl = INITIAL_SETLIST.split(',')
+          .map(function(s) { return Number(s.trim()); })
+          .filter(function(n) { return n > 0; })
+          .slice(0, MAX_SETLIST_SIZE);
+        if (fromUrl.length > 0) {
+          setlistSongIds = fromUrl;
+          try {
+            localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlistSongIds));
+          } catch (e) {}
+          return;
+        }
+      }
       try {
         const raw = localStorage.getItem(SETLIST_STORAGE_KEY);
         if (raw) {
@@ -222,6 +254,70 @@
       try {
         localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlistSongIds));
       } catch (e) {}
+      syncUrlWithSetlist();
+    }
+
+    /**
+     * 一鍵複製「今日崇拜歌單」專屬連結（供主席傳給影音同工與樂手）
+     */
+    function copySetlistShareLink() {
+      if (setlistSongIds.length === 0) {
+        alert('請先釘選至少 1 首詩歌至「今日崇拜歌單」！');
+        return;
+      }
+
+      let baseUrl = DEFAULT_WEBAPP_EXEC_URL;
+      try {
+        if (document.referrer && document.referrer.indexOf('script.google.com') !== -1 && document.referrer.indexOf('/exec') !== -1) {
+          baseUrl = document.referrer.split('?')[0];
+        }
+      } catch (e) {}
+
+      const shareUrl = baseUrl + '?pass=admin&setlist=' + setlistSongIds.join(',');
+
+      const showCopiedFeedback = function() {
+        const btn = document.getElementById('copySetlistLinkBtn');
+        const icon = document.getElementById('copySetlistLinkIcon');
+        const text = document.getElementById('copySetlistLinkText');
+        if (!btn || !icon || !text) return;
+        btn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer';
+        icon.className = 'fa-solid fa-check';
+        text.innerText = '已複製歌單連結！';
+        if (copyLinkFeedbackTimer) clearTimeout(copyLinkFeedbackTimer);
+        copyLinkFeedbackTimer = setTimeout(function() {
+          btn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer';
+          icon.className = 'fa-solid fa-link';
+          text.innerText = '複製歌單連結';
+        }, 2500);
+      };
+
+      const fallbackCopy = function(str) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = str;
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (ok) {
+            showCopiedFeedback();
+          } else {
+            prompt('請手動複製以下今日崇拜歌單連結：', str);
+          }
+        } catch (err) {
+          prompt('請手動複製以下今日崇拜歌單連結：', str);
+        }
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(showCopiedFeedback).catch(function() {
+          fallbackCopy(shareUrl);
+        });
+      } else {
+        fallbackCopy(shareUrl);
+      }
     }
 
     /**

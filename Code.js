@@ -5,8 +5,14 @@ function doGet(e) {
     isAdmin = true;
   }
 
+  let initialSetlist = '';
+  if (e && e.parameter && e.parameter.setlist) {
+    initialSetlist = String(e.parameter.setlist).replace(/[^0-9a-zA-Z,_-]/g, '');
+  }
+
   const template = HtmlService.createTemplateFromFile('Index');
   template.isAdmin = isAdmin;
+  template.initialSetlist = initialSetlist;
 
   return template.evaluate()
     .setTitle(isAdmin ? '教會詩歌檢索系統 (同工控制台)' : '教會詩歌檢索 (會眾歌詞版)')
