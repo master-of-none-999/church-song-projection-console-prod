@@ -56,7 +56,10 @@
 - **GAS 編輯器網址**：`https://script.google.com/home/projects/17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz/edit`
 
 ```bash
-# 步驟 A：確認 .clasp.json 為開發測試副本 Script ID 後推送並更新測試部署，並推送至開發版 GitHub (origin)
+# 步驟 A：雙擊執行 deploy-staging.bat，或於終端機執行：
+.\deploy-staging.bat "測試更新說明"
+
+# （底層自動執行以下指令：推送至開發測試副本 GAS 並同步至開發版 GitHub origin）
 npx @google/clasp push -f
 npx @google/clasp deploy -i AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl -d "測試更新說明"
 git push origin main
@@ -73,7 +76,10 @@ git push origin main
 - **GAS 編輯器網址**：`https://script.google.com/u/0/home/projects/1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI/edit`
 
 ```bash
-# 步驟 B：當開發測試副本確認無誤、使用者明確授權更新原版時，使用 -P .clasp.prod.json 指定原版設定檔推送與部署，並同步推送至原版專屬 GitHub Repo (prod)：
+# 步驟 B：當開發測試副本確認無誤、使用者明確授權更新原版時，雙擊執行 deploy-prod.bat，或於終端機執行：
+.\deploy-prod.bat --yes "正式版更新說明"
+
+# （底層自動使用 -P .clasp.prod.json 推送至原版 GAS 並同步至雙 GitHub 儲存庫 origin 與 prod）
 # （注意：切勿在 .claspignore 排除 driveSync.js，否則 GAS API 會將遠端的 driveSync.gs 刪除；若原版同工有修改 driveSync.js，推送前請先 pull 同步）
 npx @google/clasp -P .clasp.prod.json push -f
 npx @google/clasp -P .clasp.prod.json deploy -i AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg -d "正式版更新說明"

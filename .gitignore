@@ -6,6 +6,8 @@
 !.claspignore
 !.clasp.json
 !.clasp.prod.json
+!deploy-staging.bat
+!deploy-prod.bat
 !README.md
 !appsscript.json
 !Code.js
