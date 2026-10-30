@@ -19,11 +19,8 @@ if "%DEPLOY_DESC%"=="" (
 )
 
 echo.
-echo [1/4] 正在同步更新 update code 備份檔...
-if exist "update code" (
-    copy /y "Code.js" "update code\gscode.txt" >nul
-    copy /y "Index.html" "update code\church-ppt-console.txt" >nul
-)
+echo [1/4] 正在設定開發版標記 (IS_DEV_ENV = true)...
+powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
 
 echo [2/4] 正在推送程式碼至【開發測試副本 GAS】...
 call npx @google/clasp -P "%~dp0.clasp.json" push -f

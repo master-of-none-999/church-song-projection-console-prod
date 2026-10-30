@@ -14,6 +14,14 @@
 
   <!-- 頁首與導覽列 -->
   <header class="bg-white shadow-sm sticky top-0 z-50">
+    <!-- 開發測試版專用頂部橘色色帶（原版預設隱藏） -->
+    <div id="devTopRibbon" class="hidden bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white text-xs font-bold py-1.5 px-4 text-center shadow-xs">
+      <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-center gap-2">
+        <span class="inline-flex items-center gap-1 bg-black/20 px-2 py-0.5 rounded-full tracking-wide">🧪 開發測試版 (DEV)</span>
+        <span>目前為開發測試副本環境（原版正式環境不受影響）</span>
+        <span id="devRibbonNote" class="text-amber-100 font-medium"></span>
+      </div>
+    </div>
     <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
       <div class="flex items-center gap-4">
         <img id="churchLogo" 
@@ -24,7 +32,13 @@
         <i id="defaultIcon" class="fa-solid fa-church text-purple-600 text-5xl font-bold hidden"></i>
         <div>
           <div class="text-2xl sm:text-3xl font-extrabold text-purple-700 tracking-wide">廣東道平安福音堂</div>
-          <h1 class="text-lg sm:text-xl font-bold text-slate-700 mt-0.5" id="appTitle">詩歌快速檢索系統</h1>
+          <div class="flex flex-wrap items-center gap-2 mt-0.5">
+            <h1 class="text-lg sm:text-xl font-bold text-slate-700" id="appTitle">詩歌快速檢索系統</h1>
+            <span id="devEnvBadge" class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+              <span>🧪 開發測試版</span>
+              <span id="devBadgeVersion" class="font-semibold text-amber-700 border-l border-amber-300 pl-1.5"></span>
+            </span>
+          </div>
         </div>
       </div>
       
@@ -195,9 +209,13 @@
     /* 精準字串比對，徹底防止 'false' 被誤判為 true */
     const IS_ADMIN = ("<?= isAdmin ?>" === "true");
     const INITIAL_SETLIST = "<?= initialSetlist ?>";
+    const IS_DEV_FROM_SERVER = ("<?= isDevEnv ?>" === "true");
+    const DEV_VERSION_NOTE = "<?= devVersionNote ?>";
     const MAX_SETLIST_SIZE = 10;
     const SETLIST_STORAGE_KEY = 'church_worship_setlist_v1';
     const DEFAULT_WEBAPP_EXEC_URL = 'https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec';
+    const PROD_DEPLOY_ID = 'AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg';
+    const DEV_DEPLOY_ID = 'AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl';
     
     let allSongs = [];
     let currentRole = IS_ADMIN ? 'av' : 'congregation'; 
@@ -423,6 +441,47 @@
     document.addEventListener('click', preCacheScreenDetails, { once: true });
 
     let appInitialized = false;
+    function detectIsDevEnv() {
+      try {
+        const parentRef = (window.parent && window.parent !== window && window.parent.document) ? window.parent.document.referrer : '';
+        const ref = parentRef || document.referrer || '';
+        if (ref.indexOf(PROD_DEPLOY_ID) !== -1) return false;
+        if (ref.indexOf(DEV_DEPLOY_ID) !== -1 || ref.indexOf('johnnyworks.biz') !== -1) return true;
+      } catch (e) {}
+      return IS_DEV_FROM_SERVER;
+    }
+
+    function applyDevEnvironmentUI() {
+      const isDev = detectIsDevEnv();
+      const ribbon = document.getElementById('devTopRibbon');
+      const ribbonNote = document.getElementById('devRibbonNote');
+      const badge = document.getElementById('devEnvBadge');
+      const badgeVer = document.getElementById('devBadgeVersion');
+      const noteText = (DEV_VERSION_NOTE && DEV_VERSION_NOTE.indexOf('devVersionNote') === -1)
+        ? DEV_VERSION_NOTE
+        : 'v1.9 (2026/10/30)';
+      if (isDev) {
+        if (ribbon) ribbon.classList.remove('hidden');
+        if (ribbonNote) ribbonNote.innerText = '｜版本備註：' + noteText;
+        if (badge) {
+          badge.classList.remove('hidden');
+          badge.title = '開發測試版備註：' + noteText;
+        }
+        if (badgeVer) {
+          const shortVer = noteText.split('—')[0].replace(/\)\s*$/, '').trim();
+          badgeVer.innerText = shortVer.indexOf('(') !== -1 && shortVer.indexOf(')') === -1 ? (shortVer + ')') : shortVer;
+        }
+        try {
+          if (document.title.indexOf('[開發版]') === -1) {
+            document.title = '[開發版] ' + document.title;
+          }
+        } catch (e) {}
+      } else {
+        if (ribbon) ribbon.classList.add('hidden');
+        if (badge) badge.classList.add('hidden');
+      }
+    }
+
     function initApp() {
       if (appInitialized) return;
       appInitialized = true;
@@ -444,6 +503,7 @@
         document.getElementById('worshipSetlistSection').classList.add('hidden');
         document.getElementById('appTitle').innerText = '詩歌歌詞搜尋系統 (會眾版)';
       }
+      applyDevEnvironmentUI();
 
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run

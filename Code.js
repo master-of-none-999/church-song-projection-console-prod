@@ -1,3 +1,7 @@
+// 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
+const IS_DEV_ENV = true;
+const DEV_VERSION_NOTE = 'v1.9 (2026/10/30 — 崇拜歌單釘選、WhatsApp 分享與全螢幕同步)';
+
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
   let isAdmin = false;
@@ -13,9 +17,12 @@ function doGet(e) {
   const template = HtmlService.createTemplateFromFile('Index');
   template.isAdmin = isAdmin;
   template.initialSetlist = initialSetlist;
+  template.isDevEnv = IS_DEV_ENV;
+  template.devVersionNote = DEV_VERSION_NOTE;
 
+  const baseTitle = isAdmin ? '教會詩歌檢索系統 (同工控制台)' : '教會詩歌檢索 (會眾歌詞版)';
   return template.evaluate()
-    .setTitle(isAdmin ? '教會詩歌檢索系統 (同工控制台)' : '教會詩歌檢索 (會眾歌詞版)')
+    .setTitle(IS_DEV_ENV ? ('[開發版] ' + baseTitle) : baseTitle)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
