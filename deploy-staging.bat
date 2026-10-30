@@ -15,12 +15,12 @@ if "%DEPLOY_DESC%"=="" (
     set /p DEPLOY_DESC="請輸入本次測試版更新說明 (直接按 Enter 則使用預設說明): "
 )
 if "%DEPLOY_DESC%"=="" (
-    set "DEPLOY_DESC=Staging update (%date% %time:~0,5%)"
+    set "DEPLOY_DESC=例行測試更新"
 )
 
 echo.
-echo [1/4] 正在設定開發版標記 (IS_DEV_ENV = true)...
-powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
+echo [1/4] 正在自動更新 Code.js 的開發版標記與 DEV_VERSION_NOTE (日期 + 修改摘要)...
+powershell -NoProfile -Command "$desc = $env:DEPLOY_DESC -replace \"'\", ''; $dt = Get-Date -Format 'yyyy/MM/dd HH:mm'; $c = Get-Content -Raw -Encoding UTF8 'Code.js'; $c = $c -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;'; $c = $c -replace \"const DEV_VERSION_NOTE = '[^']*';\", (\"const DEV_VERSION_NOTE = '(\" + $dt + \") — \" + $desc + \"';\"); Set-Content -NoNewline -Encoding UTF8 'Code.js' $c"
 
 echo [2/4] 正在推送程式碼至【開發測試副本 GAS】...
 call npx @google/clasp -P "%~dp0.clasp.json" push -f

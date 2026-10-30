@@ -6,6 +6,8 @@
 !.claspignore
 !.clasp.json
 !.clasp.prod.json
+!.agents/
+!.agents/**
 !deploy-staging.bat
 !deploy-prod.bat
 !README.md
