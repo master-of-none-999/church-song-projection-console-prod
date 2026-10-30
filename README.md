@@ -49,29 +49,40 @@
 
 ### 🧪 1. 開發測試副本（Staging / Dev — 預設綁定環境）
 - **管理帳號**：`0711jlau@gmail.com`
+- **GitHub Repo (`origin`)**：`https://github.com/master-of-none-999/church-song-projection-console`
 - **Script ID**：`17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz`
 - **Deployment ID**：`AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl`
 - **同工版測試網址**：`https://script.google.com/a/macros/johnnyworks.biz/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec?pass=admin`
 - **GAS 編輯器網址**：`https://script.google.com/home/projects/17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz/edit`
 
 ```bash
-# 步驟 A：確認 .clasp.json 為開發測試副本 Script ID 後推送並更新測試部署
+# 步驟 A：確認 .clasp.json 為開發測試副本 Script ID 後推送並更新測試部署，並推送至開發版 GitHub (origin)
 npx @google/clasp push -f
 npx @google/clasp deploy -i AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl -d "測試更新說明"
+git push origin main
 ```
 
 ---
 
 ### 🚀 2. 原版正式環境（Production — 測試確認後才推送）
 - **原版帳號**：`worshiphymm@gmail.com`（需將 `0711jlau@gmail.com` 設為專案編輯者方可透過 `clasp` 直接推送）
+- **GitHub Repo (`prod`)**：`https://github.com/master-of-none-999/church-song-projection-console-prod`
 - **Script ID**：`1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI`
 - **Deployment ID**：`AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg`
 - **同工版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?pass=admin`
 - **GAS 編輯器網址**：`https://script.google.com/u/0/home/projects/1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI/edit`
 
 ```bash
-# 步驟 B：當開發測試副本確認無誤、使用者明確授權更新原版時，使用 -P .clasp.prod.json 指定原版設定檔推送與部署（完全不必修改 .clasp.json）：
+# 步驟 B：當開發測試副本確認無誤、使用者明確授權更新原版時，使用 -P .clasp.prod.json 指定原版設定檔推送與部署，並同步推送至原版專屬 GitHub Repo (prod)：
 # （注意：切勿在 .claspignore 排除 driveSync.js，否則 GAS API 會將遠端的 driveSync.gs 刪除；若原版同工有修改 driveSync.js，推送前請先 pull 同步）
 npx @google/clasp -P .clasp.prod.json push -f
 npx @google/clasp -P .clasp.prod.json deploy -i AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg -d "正式版更新說明"
+git push prod main
 ```
+
+#### ⚠️ 跨帳號首次執行 `clasp deploy` 的授權注意事項（`REVIEW PERMISSIONS`）
+- 由於 `appsscript.json` 設定為 `"executeAs": "USER_DEPLOYING"`（以部署者身分執行），當透過終端機的開發帳號（`0711jlau@gmail.com`）對原版專案（擁有者為 `worshiphymm@gmail.com`）執行 `clasp deploy` 時，GAS 會將該部署的執行身分切換為 `0711jlau@gmail.com`。
+- **首次跨帳號部署後（或新增權限範圍時）**，在完成 OAuth 授權前，其他瀏覽器（如預設登入企業網域 `jlau0711@johnnyworks.biz` 的視窗）開啟標準 `/exec` 網址時，會被 Google 自動重導向至 `/a/macros/johnnyworks.biz/...` 並顯示「您需要存取權」。
+- **解除方法（二選一，僅需做 1 次）**：
+  1. **直接完成初次授權**：在登入 `0711jlau@gmail.com` 的瀏覽器開啟原版標準 `/exec` 網址，點擊藍色 **`REVIEW PERMISSIONS`** 按鈕 ➔ 選擇 `0711jlau@gmail.com` ➔ 點左下角 **`Advanced`（進階）** ➔ 點 **`Go to 廣平詩歌檢索控制台 (unsafe)`** ➔ 點 **`Allow`（允許）**。授權完成後，所有帳號與匿名使用者皆可立即正常開啟，且日後再執行 `clasp deploy` 不會再跳出。
+  2. **或維持原擁有者身分部署**：在終端機僅執行 `npx @google/clasp -P .clasp.prod.json push -f` 推送程式碼，接著由 `worshiphymm@gmail.com` 登入原版 GAS 網頁編輯器，點選「**部署 ➔ 管理部署作業 ➔ ✏️ 編輯 ➔ 新版本 ➔ 部署**」。
