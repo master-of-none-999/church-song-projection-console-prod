@@ -1287,7 +1287,7 @@
           pdfLink.href = song.pdfUrl || '#';
           pdfLink.target = '_blank';
           pdfLink.className = (song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 pointer-events-none') + ' text-white text-center py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 w-full';
-          pdfLink.innerHTML = '<i class="fa-solid fa-file-pdf"></i> 查看歌譜 (' + (song.pdfNote || '第一頁') + ')';
+          pdfLink.innerHTML = '<i class="fa-solid fa-file-pdf"></i> 查看歌譜 (PDF)';
           item.appendChild(pdfLink);
         } else {
           const lyrPreview = document.createElement('div');
@@ -1368,12 +1368,9 @@
             </button>
           `;
         } else if (currentRole === 'musician' && IS_ADMIN) {
+          /* 已移除歌譜位置黃框，僅保留歌譜連結。 */
           bodyHtml = `
             ${headerHtml}
-            <div class="bg-amber-50 border border-amber-100 p-2.5 rounded-xl text-xs text-amber-800 flex items-center justify-between">
-              <span><i class="fa-solid fa-book-open mr-1"></i> 歌譜位置：</span>
-              <span class="font-bold">${song.pdfNote || '第一頁'}</span>
-            </div>
             <a href="${song.pdfUrl || '#'}" target="_blank" 
                class="${song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2">
               <i class="fa-solid fa-file-pdf"></i> 查看歌譜 (PDF)

@@ -5,6 +5,7 @@
 !.gitignore
 !.claspignore
 !.clasp.json
+!.clasp.prod.json
 !README.md
 !appsscript.json
 !Code.js

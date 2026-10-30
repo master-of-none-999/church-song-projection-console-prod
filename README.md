@@ -42,15 +42,36 @@
 
 ---
 
-## 🛠️ 開發與部署流程 (`clasp`)
+## 🛠️ 雙環境開發、測試與正式部署規範 (`clasp`)
+
+> ⚠️ **部署原則（先測試、後正式）**：
+> 每次修改功能時，`.clasp.json` 預設保持綁定**「1. 開發測試副本」**。必須先推送到開發副本並完成測試驗證、確認無誤後，才可切換至**「2. 原版正式環境」**推送更新（同時同步更新 `update code/` 內的交接備份檔）。
+
+### 🧪 1. 開發測試副本（Staging / Dev — 預設綁定環境）
+- **管理帳號**：`0711jlau@gmail.com`
+- **Script ID**：`17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz`
+- **Deployment ID**：`AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl`
+- **同工版測試網址**：`https://script.google.com/a/macros/johnnyworks.biz/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec?pass=admin`
+- **GAS 編輯器網址**：`https://script.google.com/home/projects/17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz/edit`
 
 ```bash
-# 1. 檢查追蹤檔案狀態
-clasp status
+# 步驟 A：確認 .clasp.json 為開發測試副本 Script ID 後推送並更新測試部署
+npx @google/clasp push -f
+npx @google/clasp deploy -i AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl -d "測試更新說明"
+```
 
-# 2. 推送修改至 Google Apps Script
-clasp push -f
+---
 
-# 3. 原地更新正式環境部署（保持 /exec 網址不變）
-clasp deploy -i <Deployment_ID> -d "Update description"
+### 🚀 2. 原版正式環境（Production — 測試確認後才推送）
+- **原版帳號**：`worshiphymm@gmail.com`（需將 `0711jlau@gmail.com` 設為專案編輯者方可透過 `clasp` 直接推送）
+- **Script ID**：`1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI`
+- **Deployment ID**：`AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg`
+- **同工版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?pass=admin`
+- **GAS 編輯器網址**：`https://script.google.com/u/0/home/projects/1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI/edit`
+
+```bash
+# 步驟 B：當開發測試副本確認無誤、使用者明確授權更新原版時，使用 -P .clasp.prod.json 指定原版設定檔推送與部署（完全不必修改 .clasp.json）：
+# （注意：切勿在 .claspignore 排除 driveSync.js，否則 GAS API 會將遠端的 driveSync.gs 刪除；若原版同工有修改 driveSync.js，推送前請先 pull 同步）
+npx @google/clasp -P .clasp.prod.json push -f
+npx @google/clasp -P .clasp.prod.json deploy -i AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg -d "正式版更新說明"
 ```
