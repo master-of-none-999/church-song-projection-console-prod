@@ -11,6 +11,7 @@
 !deploy-staging.bat
 !deploy-prod.bat
 !README.md
+!robots.txt
 !appsscript.json
 !Code.js
 !driveSync.js

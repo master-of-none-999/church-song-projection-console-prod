@@ -2,6 +2,8 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet">
   <title>廣東道平安福音堂 - 詩歌快速檢索系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -44,6 +46,18 @@
       
       <!-- 導覽列：僅在同工權限時顯示 -->
       <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center">
+        <!-- PowerPoint 式投影監視器下拉選單（僅影音 PPT 模式顯示） -->
+        <div id="monitorPickerWrap" class="hidden items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs" title="選擇投影簡報彈出視窗的目標顯示器（類似 PowerPoint 監視器設定）">
+          <i class="fa-solid fa-desktop text-purple-600"></i>
+          <label for="monitorSelect" class="whitespace-nowrap select-none">監視器:</label>
+          <select id="monitorSelect" onchange="handleMonitorChange(this.value)" class="bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer max-w-[195px] truncate">
+            <option value="auto">自動 (副螢幕優先)</option>
+            <option value="primary">主監視器</option>
+            <option value="secondary_right">監視器 2 (主螢幕右側)</option>
+            <option value="secondary_left">監視器 2 (主螢幕左側)</option>
+            <option value="detect">🔍 偵測顯示器型號...</option>
+          </select>
+        </div>
         <button type="button" id="helpBtn" onclick="toggleHelpModal(true)" class="hidden px-3 py-2 rounded-xl text-sm font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 shadow-sm transition-all flex items-center gap-1.5" title="查看影音同工投影操作說明">
           <i class="fa-solid fa-circle-question"></i> 操作說明
         </button>
@@ -206,14 +220,25 @@
   </div>
 
   <script>
-    /* 精準字串比對，徹底防止 'false' 被誤判為 true */
-    const IS_ADMIN = ("<?= isAdmin ?>" === "true");
-    const INITIAL_SETLIST = "<?= initialSetlist ?>";
+    /* 精準字串比對，同時相容 GAS 樣板渲染與頂層獨立網頁 (GitHub Pages) 網址參數 */
+    const URL_PARAMS = (function() {
+      try { return new URLSearchParams(window.location.search || ''); }
+      catch (e) { return { get: function() { return null; } }; }
+    })();
+    const IS_ADMIN = ("<?= isAdmin ?>" === "true") ||
+                     (URL_PARAMS.get('pass') === 'admin') ||
+                     (URL_PARAMS.get('mode') === 'admin');
+    const RAW_INITIAL_SETLIST = "<?= initialSetlist ?>";
+    const INITIAL_SETLIST = (RAW_INITIAL_SETLIST && RAW_INITIAL_SETLIST.indexOf('initialSetlist') === -1)
+      ? RAW_INITIAL_SETLIST
+      : (URL_PARAMS.get('setlist') || '');
     const IS_DEV_FROM_SERVER = ("<?= isDevEnv ?>" === "true");
     const DEV_VERSION_NOTE = "<?= devVersionNote ?>";
     const MAX_SETLIST_SIZE = 10;
     const SETLIST_STORAGE_KEY = 'church_worship_setlist_v1';
+    const MONITOR_STORAGE_KEY = 'church_projector_monitor_v1';
     const DEFAULT_WEBAPP_EXEC_URL = 'https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec';
+    const DEV_WEBAPP_EXEC_URL = 'https://script.google.com/macros/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec';
     const PROD_DEPLOY_ID = 'AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg';
     const DEV_DEPLOY_ID = 'AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl';
     
@@ -222,6 +247,8 @@
     let selectedCategory = 'ALL';
     let selectedCharCount = 0;
     let cachedOtherScreen = null;
+    let detectedScreens = [];
+    let selectedMonitorChoice = 'auto';
     let pptWindowRef = null;
     let currentProjectedSong = null;
     let currentSlidePage = 1;
@@ -420,36 +447,207 @@
     }
 
     /**
-     * 預先快取副螢幕資訊（避免在點擊開啟 PPT 當下使用 async/await 導致喪失 User Gesture Activation）
+     * 讀取與儲存投影監視器偏好設定
      */
-    async function preCacheScreenDetails() {
-      if (!('getScreenDetails' in window) || cachedOtherScreen) return;
+    function loadMonitorPrefFromStorage() {
+      try {
+        const saved = localStorage.getItem(MONITOR_STORAGE_KEY);
+        if (saved && saved !== 'detect') {
+          selectedMonitorChoice = saved;
+        }
+      } catch (e) {}
+      const sel = document.getElementById('monitorSelect');
+      if (sel) {
+        const hasOption = Array.from(sel.options).some(function(o) { return o.value === selectedMonitorChoice; });
+        sel.value = hasOption ? selectedMonitorChoice : 'auto';
+      }
+    }
+
+    function saveMonitorPrefToStorage(val) {
+      if (!val || val === 'detect') return;
+      selectedMonitorChoice = val;
+      try {
+        localStorage.setItem(MONITOR_STORAGE_KEY, val);
+      } catch (e) {}
+    }
+
+    /**
+     * 將偵測到的硬體顯示器清單（含顯示器型號，例如 PHL 272V8）填入「🖥 監視器」下拉選單
+     */
+    function refreshMonitorSelectOptions() {
+      const sel = document.getElementById('monitorSelect');
+      if (!sel) return;
+      const prevVal = selectedMonitorChoice || sel.value || 'auto';
+      sel.innerHTML = '';
+
+      const addOpt = function(val, text) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = text;
+        sel.appendChild(opt);
+      };
+
+      addOpt('auto', '自動 (副螢幕優先)');
+
+      if (detectedScreens && detectedScreens.length > 0) {
+        detectedScreens.forEach(function(scr, idx) {
+          const modelName = (scr.label && String(scr.label).trim()) ? (' ' + String(scr.label).trim()) : '';
+          const primaryTag = scr.isPrimary ? ' (主監視器)' : '';
+          addOpt('screen_' + idx, '監視器 ' + (idx + 1) + modelName + primaryTag);
+        });
+      } else {
+        addOpt('primary', '主監視器');
+        addOpt('secondary_right', '監視器 2 (主螢幕右側)');
+        addOpt('secondary_left', '監視器 2 (主螢幕左側)');
+        addOpt('detect', '🔍 偵測顯示器型號...');
+      }
+
+      const exists = Array.from(sel.options).some(function(o) { return o.value === prevVal; });
+      sel.value = exists ? prevVal : 'auto';
+      selectedMonitorChoice = sel.value;
+    }
+
+    /**
+     * 根據「🖥 監視器」選單計算目標彈出視窗座標與尺寸
+     */
+    function getTargetMonitorGeometry() {
+      const choice = selectedMonitorChoice || 'auto';
+      const baseW = window.screen.availWidth || 1280;
+      const baseH = window.screen.availHeight || 720;
+
+      if (choice.indexOf('screen_') === 0 && detectedScreens.length > 0) {
+        const idx = Number(choice.replace('screen_', ''));
+        const scr = detectedScreens[idx];
+        if (scr) {
+          return {
+            left: scr.availLeft,
+            top: scr.availTop,
+            width: scr.availWidth || baseW,
+            height: scr.availHeight || baseH
+          };
+        }
+      }
+
+      if (choice === 'primary') {
+        const pri = detectedScreens.find(function(s) { return s.isPrimary; });
+        return {
+          left: pri ? pri.availLeft : 0,
+          top: pri ? pri.availTop : 0,
+          width: pri ? pri.availWidth : baseW,
+          height: pri ? pri.availHeight : baseH
+        };
+      }
+
+      if (choice === 'secondary_left') {
+        return {
+          left: -baseW,
+          top: 0,
+          width: baseW,
+          height: baseH
+        };
+      }
+
+      if (choice === 'secondary_right') {
+        return {
+          left: cachedOtherScreen ? cachedOtherScreen.availLeft : baseW,
+          top: cachedOtherScreen ? cachedOtherScreen.availTop : 0,
+          width: cachedOtherScreen ? cachedOtherScreen.availWidth : baseW,
+          height: cachedOtherScreen ? cachedOtherScreen.availHeight : baseH
+        };
+      }
+
+      /* auto：預設副螢幕優先 */
+      return {
+        left: cachedOtherScreen ? cachedOtherScreen.availLeft : baseW,
+        top: cachedOtherScreen ? cachedOtherScreen.availTop : 0,
+        width: cachedOtherScreen ? cachedOtherScreen.availWidth : baseW,
+        height: cachedOtherScreen ? cachedOtherScreen.availHeight : baseH
+      };
+    }
+
+    /**
+     * 使用者切換「🖥 監視器」下拉選單時的處理邏輯
+     */
+    async function handleMonitorChange(val) {
+      if (val === 'detect') {
+        const ok = await preCacheScreenDetails(true);
+        if (!ok) {
+          const sel = document.getElementById('monitorSelect');
+          if (sel) sel.value = selectedMonitorChoice || 'auto';
+        }
+        return;
+      }
+      saveMonitorPrefToStorage(val);
+
+      /* 若投影視窗已開啟且未處於全螢幕，嘗試即時移動至新選定的監視器 */
+      if (pptWindowRef && !pptWindowRef.closed) {
+        try {
+          if (!pptWindowRef.document.fullscreenElement) {
+            const geom = getTargetMonitorGeometry();
+            pptWindowRef.moveTo(geom.left, geom.top);
+            pptWindowRef.resizeTo(geom.width, geom.height);
+          }
+        } catch (e) {}
+      }
+    }
+
+    /**
+     * 預先快取副螢幕資訊（支援讀取顯示器型號如 PHL 272V8，並避免在點擊開啟 PPT 當下使用 async/await）
+     */
+    async function preCacheScreenDetails(isManualTrigger) {
+      if (!('getScreenDetails' in window)) {
+        if (isManualTrigger) {
+          alert('您目前的瀏覽器（例如 Firefox）不支援讀取硬體顯示器型號名稱，但可直接選擇「監視器 2 (主螢幕右側 / 左側)」自動將視窗彈至副螢幕！');
+        }
+        return false;
+      }
       try {
         const screenDetails = await window.getScreenDetails();
-        const updateCachedScreen = () => {
-          cachedOtherScreen = screenDetails.screens.find(s => !s.isPrimary) ||
-                              screenDetails.screens.find(s => s !== screenDetails.currentScreen) ||
+        const updateCachedScreen = function() {
+          detectedScreens = Array.from(screenDetails.screens || []);
+          cachedOtherScreen = detectedScreens.find(function(s) { return !s.isPrimary; }) ||
+                              detectedScreens.find(function(s) { return s !== screenDetails.currentScreen; }) ||
                               null;
+          refreshMonitorSelectOptions();
         };
         updateCachedScreen();
         screenDetails.addEventListener('screenschange', updateCachedScreen);
+        return true;
       } catch (err) {
-        /* GAS 雙層沙盒 iframe 可能會阻擋 window-management 權限，靜默降級即可 */
+        /* GAS 雙層沙盒 iframe 會阻擋 window-management 權限；若為使用者主動點擊「偵測顯示器型號」則給予清楚提示 */
+        if (isManualTrigger) {
+          alert(
+            '💡 顯示器型號偵測提示：\n\n' +
+            '由於 Google Apps Script 預設將網頁包在沙盒框架 (iframe) 內，Chrome / Edge 在此網址下會限制讀取硬體顯示器型號（如 PHL 272V8）。\n\n' +
+            '✅ 解決方式：\n' +
+            '1. 直接在選單選擇「監視器 2 (主螢幕右側 / 左側)」（Firefox 可直接自動彈至副螢幕）。\n' +
+            '2. 或改由 GitHub Pages 頂層獨立網址開啟本控制台，Chrome / Edge 即可完整顯示各台監視器型號並直接跨螢幕彈出！'
+          );
+        }
+        return false;
       }
     }
 
     /* 在首次點擊頁面時嘗試預先快取多重螢幕資訊 */
-    document.addEventListener('click', preCacheScreenDetails, { once: true });
+    document.addEventListener('click', function() { preCacheScreenDetails(false); }, { once: true });
 
     let appInitialized = false;
     function detectIsDevEnv() {
       try {
+        const host = window.location.hostname || '';
+        if (host.indexOf('github.io') !== -1 && window.location.pathname.indexOf('-prod') === -1) {
+          return true;
+        }
         const parentRef = (window.parent && window.parent !== window && window.parent.document) ? window.parent.document.referrer : '';
         const ref = parentRef || document.referrer || '';
         if (ref.indexOf(PROD_DEPLOY_ID) !== -1) return false;
         if (ref.indexOf(DEV_DEPLOY_ID) !== -1 || ref.indexOf('johnnyworks.biz') !== -1) return true;
       } catch (e) {}
       return IS_DEV_FROM_SERVER;
+    }
+
+    function getBackendApiBaseUrl() {
+      return detectIsDevEnv() ? DEV_WEBAPP_EXEC_URL : DEFAULT_WEBAPP_EXEC_URL;
     }
 
     function applyDevEnvironmentUI() {
@@ -460,7 +658,7 @@
       const badgeVer = document.getElementById('devBadgeVersion');
       const noteText = (DEV_VERSION_NOTE && DEV_VERSION_NOTE.indexOf('devVersionNote') === -1)
         ? DEV_VERSION_NOTE
-        : 'v1.9 (2026/10/30)';
+        : 'v2.1 (2026/11/02 — 新增 PowerPoint 式投影監視器選單與防搜尋引擎爬蟲設定)';
       if (isDev) {
         if (ribbon) ribbon.classList.remove('hidden');
         if (ribbonNote) ribbonNote.innerText = '｜版本備註：' + noteText;
@@ -488,19 +686,29 @@
       appInitialized = true;
 
       loadSetlistFromStorage();
+      loadMonitorPrefFromStorage();
       initCharChips();
-      preCacheScreenDetails();
+      preCacheScreenDetails(false);
 
+      const monitorWrap = document.getElementById('monitorPickerWrap');
       if (IS_ADMIN) {
         document.getElementById('adminNav').classList.remove('hidden');
         document.getElementById('blackoutBtn').classList.remove('hidden');
         document.getElementById('helpBtn').classList.remove('hidden');
+        if (monitorWrap && currentRole === 'av') {
+          monitorWrap.classList.remove('hidden');
+          monitorWrap.classList.add('flex');
+        }
         document.getElementById('worshipSetlistSection').classList.remove('hidden');
         document.getElementById('appTitle').innerText = '詩歌檢索控制台 (同工版)';
       } else {
         document.getElementById('adminNav').classList.add('hidden');
         document.getElementById('blackoutBtn').classList.add('hidden');
         document.getElementById('helpBtn').classList.add('hidden');
+        if (monitorWrap) {
+          monitorWrap.classList.add('hidden');
+          monitorWrap.classList.remove('flex');
+        }
         document.getElementById('worshipSetlistSection').classList.add('hidden');
         document.getElementById('appTitle').innerText = '詩歌歌詞搜尋系統 (會眾版)';
       }
@@ -519,6 +727,21 @@
             document.getElementById('loadingSpinner').classList.add('hidden');
           })
           .getSongsData(IS_ADMIN);
+      } else {
+        /* 頂層獨立網頁模式 (如 GitHub Pages)：自動透過 GAS JSON API 載入詩歌資料 */
+        const apiUrl = getBackendApiBaseUrl() + '?action=getSongs' + (IS_ADMIN ? '&pass=admin' : '');
+        fetch(apiUrl)
+          .then(function(res) { return res.json(); })
+          .then(function(payload) {
+            allSongs = (payload && Array.isArray(payload.songs)) ? payload.songs : [];
+            document.getElementById('loadingSpinner').classList.add('hidden');
+            render();
+          })
+          .catch(function(err) {
+            const errMsg = (err && err.message) ? err.message : String(err || '未知錯誤');
+            document.getElementById('resultCount').innerText = '資料讀取失敗：' + errMsg;
+            document.getElementById('loadingSpinner').classList.add('hidden');
+          });
       }
     }
 
@@ -995,13 +1218,9 @@
 
       if (!pptWindowRef || pptWindowRef.closed) {
         isNewWindow = true;
-        /* 恢復 left = window.screen.availWidth，讓 Firefox 可直接在副螢幕開啟並記憶副螢幕位置 */
-        const left = cachedOtherScreen ? cachedOtherScreen.availLeft : window.screen.availWidth;
-        const top = cachedOtherScreen ? cachedOtherScreen.availTop : 0;
-        const w = cachedOtherScreen ? cachedOtherScreen.availWidth : window.screen.availWidth;
-        const h = cachedOtherScreen ? cachedOtherScreen.availHeight : window.screen.availHeight;
-
-        const features = 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+        /* 根據頂部「🖥 監視器」下拉選單決定目標螢幕座標與尺寸 */
+        const geom = getTargetMonitorGeometry();
+        const features = 'width=' + geom.width + ',height=' + geom.height + ',left=' + geom.left + ',top=' + geom.top + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
         pptWindowRef = window.open('', 'ChurchProjectorPopup_v3', features);
       }
 
@@ -1055,8 +1274,8 @@
       } else {
         currentSlideInfo = buildFallbackSlideInfo(rawUrl, currentProjectedSong.lyrics);
         renderSlideRemoteBars();
+        const targetUrl = rawUrl;
         if (typeof google !== 'undefined' && google.script && google.script.run) {
-          const targetUrl = rawUrl;
           google.script.run
             .withSuccessHandler(function(info) {
               if (info && info.totalPages) {
@@ -1069,6 +1288,23 @@
               }
             })
             .getPresentationSlideInfo(rawUrl, currentProjectedSong.lyrics || '');
+        } else {
+          const slideApiUrl = getBackendApiBaseUrl() +
+            '?action=getSlideInfo&pptUrl=' + encodeURIComponent(rawUrl) +
+            '&lyrics=' + encodeURIComponent(currentProjectedSong.lyrics || '');
+          fetch(slideApiUrl)
+            .then(function(res) { return res.json(); })
+            .then(function(info) {
+              if (info && info.totalPages) {
+                slideInfoCache[targetUrl] = info;
+                if (currentProjectedSong && currentProjectedSong.pptUrl === targetUrl) {
+                  currentSlideInfo = info;
+                  if (currentSlidePage > info.totalPages) currentSlidePage = info.totalPages;
+                  renderSlideRemoteBars();
+                }
+              }
+            })
+            .catch(function() {});
         }
       }
       
@@ -1148,9 +1384,19 @@
       if (!IS_ADMIN) return;
       currentRole = role;
       const blackoutBtn = document.getElementById('blackoutBtn');
+      const monitorWrap = document.getElementById('monitorPickerWrap');
       if (blackoutBtn) {
         if (role === 'av') blackoutBtn.classList.remove('hidden');
         else blackoutBtn.classList.add('hidden');
+      }
+      if (monitorWrap) {
+        if (role === 'av') {
+          monitorWrap.classList.remove('hidden');
+          monitorWrap.classList.add('flex');
+        } else {
+          monitorWrap.classList.add('hidden');
+          monitorWrap.classList.remove('flex');
+        }
       }
       renderSlideRemoteBars();
       ['av', 'musician', 'congregation'].forEach(r => {
