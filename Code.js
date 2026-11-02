@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v1.9 (2026/10/30 — 崇拜歌單釘選、WhatsApp 分享與全螢幕同步)';
+const DEV_VERSION_NOTE = 'v2.0 (2026/11/02 — 簡報自動預熱防錯機制，徹底解決 Google 文件發生錯誤)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限

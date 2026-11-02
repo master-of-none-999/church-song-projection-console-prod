@@ -233,6 +233,7 @@
     let copyLinkFeedbackTimer = null;
     let copyTextFeedbackTimer = null;
     const slideInfoCache = {};
+    const warmedPresentationIds = {};
 
     function syncUrlWithSetlist() {
       if (typeof google !== 'undefined' && google.script && google.script.history) {
@@ -527,6 +528,53 @@
       initApp();
     }
     window.addEventListener('load', initApp);
+
+    /**
+     * 擷取 Google Slides 簡報檔案 ID
+     */
+    function extractPresentationId(rawUrl) {
+      if (!rawUrl) return '';
+      const slideMatch = String(rawUrl).match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
+      return (slideMatch && slideMatch[1]) ? slideMatch[1] : '';
+    }
+
+    /**
+     * 自動預熱傳統 .ppt / .pps 二進位簡報之 Google Slides 雲端相容模式轉檔快取（OCM Cache）
+     * 解決未曾開啟過 /edit?rtpof=true 的簡報直接存取 /preview 時回傳 HTTP 500「Google 文件發生錯誤」的問題
+     */
+    function warmupPresentationCache(rawUrl) {
+      const docId = extractPresentationId(rawUrl);
+      if (!docId || warmedPresentationIds[docId] === true) {
+        return Promise.resolve(true);
+      }
+      if (warmedPresentationIds[docId]) {
+        return warmedPresentationIds[docId];
+      }
+      const warmupUrl = 'https://docs.google.com/presentation/d/' + docId + '/edit?usp=drivesdk&rtpof=true&sd=true';
+      const reqPromise = Promise.race([
+        fetch(warmupUrl, { mode: 'no-cors', credentials: 'omit', cache: 'no-store' }).catch(function() {}),
+        new Promise(function(resolve) { setTimeout(resolve, 1800); })
+      ]).then(function() {
+        warmedPresentationIds[docId] = true;
+        return true;
+      });
+      warmedPresentationIds[docId] = reqPromise;
+      return reqPromise;
+    }
+
+    /**
+     * 針對「今日崇拜歌單」已釘選之詩歌，於背景自動預熱簡報快取
+     */
+    function warmupSetlistPresentations(songs) {
+      if (!Array.isArray(songs) || songs.length === 0) return;
+      songs.forEach(function(song, idx) {
+        if (song && song.pptUrl) {
+          setTimeout(function() {
+            warmupPresentationCache(song.pptUrl);
+          }, idx * 180);
+        }
+      });
+    }
 
     /**
      * 轉換為直接放映網址（支援指定跳頁 slideNum，例如 id.p3 代表第 3 頁）
@@ -959,13 +1007,29 @@
 
       if (pptWindowRef) {
         startProjectorWindowWatcher();
+        const docId = extractPresentationId(rawUrl);
+        const isAlreadyWarmed = (!docId || warmedPresentationIds[docId] === true);
+        const loadFramePlayUrl = function(frameEl) {
+          if (isAlreadyWarmed) {
+            frameEl.src = playUrl;
+          } else {
+            warmupPresentationCache(rawUrl).then(function() {
+              if (currentProjectedSong && currentProjectedSong.pptUrl === rawUrl && pptWindowRef && !pptWindowRef.closed) {
+                try {
+                  const targetFrame = pptWindowRef.document.getElementById('pptFrame') || frameEl;
+                  targetFrame.src = convertToDirectPlayUrl(rawUrl, currentSlidePage);
+                } catch (e) {}
+              }
+            });
+          }
+        };
         try {
           const frame = ensureProjectorShell(pptWindowRef, isNewWindow);
           const standby = pptWindowRef.document.getElementById('standbyOverlay');
           if (standby) standby.style.display = 'none';
           updateBlackoutButtonUI(false);
           frame.style.display = 'block';
-          frame.src = playUrl;
+          loadFramePlayUrl(frame);
           /* 僅在首次新開視窗時 focus 外層以支援直接按 F11，切換詩歌時不搶焦點 */
           if (isNewWindow) {
             pptWindowRef.focus();
@@ -976,7 +1040,7 @@
           setTimeout(function() {
             const frame = ensureProjectorShell(pptWindowRef, true);
             updateBlackoutButtonUI(false);
-            frame.src = playUrl;
+            loadFramePlayUrl(frame);
             renderSlideRemoteBars();
           }, 150);
         }
@@ -1237,6 +1301,7 @@
       }
 
       if (emptyHint) emptyHint.classList.add('hidden');
+      warmupSetlistPresentations(pinnedSongs);
       if (headerActions) {
         headerActions.classList.remove('hidden');
         headerActions.classList.add('flex');
