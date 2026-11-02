@@ -50,7 +50,7 @@
         <div id="monitorPickerWrap" class="hidden items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs" title="選擇投影簡報彈出視窗的目標顯示器（類似 PowerPoint 監視器設定）">
           <i class="fa-solid fa-desktop text-purple-600"></i>
           <label for="monitorSelect" class="whitespace-nowrap select-none">監視器:</label>
-          <select id="monitorSelect" onchange="handleMonitorChange(this.value)" class="bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer max-w-[195px] truncate">
+          <select id="monitorSelect" onmousedown="if(detectedScreens.length===0) preCacheScreenDetails(false);" onchange="handleMonitorChange(this.value)" class="bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer max-w-[220px] truncate">
             <option value="auto">自動 (副螢幕優先)</option>
             <option value="primary">主監視器</option>
             <option value="secondary_right">監視器 2 (主螢幕右側)</option>
@@ -487,15 +487,21 @@
         sel.appendChild(opt);
       };
 
-      addOpt('auto', '自動 (副螢幕優先)');
-
       if (detectedScreens && detectedScreens.length > 0) {
+        const secIdx = detectedScreens.findIndex(function(s) { return !s.isPrimary; });
+        const secScr = secIdx !== -1 ? detectedScreens[secIdx] : cachedOtherScreen;
+        const secModel = (secScr && secScr.label && String(secScr.label).trim())
+          ? (' — 監視器 ' + (secIdx !== -1 ? (secIdx + 1) : 2) + ' ' + String(secScr.label).trim())
+          : '';
+        addOpt('auto', '自動' + (secModel || ' (副螢幕優先)'));
+
         detectedScreens.forEach(function(scr, idx) {
           const modelName = (scr.label && String(scr.label).trim()) ? (' ' + String(scr.label).trim()) : '';
           const primaryTag = scr.isPrimary ? ' (主監視器)' : '';
           addOpt('screen_' + idx, '監視器 ' + (idx + 1) + modelName + primaryTag);
         });
       } else {
+        addOpt('auto', '自動 (副螢幕優先)');
         addOpt('primary', '主監視器');
         addOpt('secondary_right', '監視器 2 (主螢幕右側)');
         addOpt('secondary_left', '監視器 2 (主螢幕左側)');
@@ -566,6 +572,20 @@
     }
 
     /**
+     * 將已開啟的投影彈出視窗移動並縮放至目標監視器座標
+     */
+    function moveProjectorWindowToTargetMonitor() {
+      if (!pptWindowRef || pptWindowRef.closed) return;
+      try {
+        if (!pptWindowRef.document.fullscreenElement) {
+          const geom = getTargetMonitorGeometry();
+          pptWindowRef.moveTo(geom.left, geom.top);
+          pptWindowRef.resizeTo(geom.width, geom.height);
+        }
+      } catch (e) {}
+    }
+
+    /**
      * 使用者切換「🖥 監視器」下拉選單時的處理邏輯
      */
     async function handleMonitorChange(val) {
@@ -578,17 +598,7 @@
         return;
       }
       saveMonitorPrefToStorage(val);
-
-      /* 若投影視窗已開啟且未處於全螢幕，嘗試即時移動至新選定的監視器 */
-      if (pptWindowRef && !pptWindowRef.closed) {
-        try {
-          if (!pptWindowRef.document.fullscreenElement) {
-            const geom = getTargetMonitorGeometry();
-            pptWindowRef.moveTo(geom.left, geom.top);
-            pptWindowRef.resizeTo(geom.width, geom.height);
-          }
-        } catch (e) {}
-      }
+      moveProjectorWindowToTargetMonitor();
     }
 
     /**
@@ -609,6 +619,8 @@
                               detectedScreens.find(function(s) { return s !== screenDetails.currentScreen; }) ||
                               null;
           refreshMonitorSelectOptions();
+          /* 一旦取得跨螢幕權限與副螢幕座標，若投影視窗已開啟，立即將視窗移往目標顯示器 */
+          moveProjectorWindowToTargetMonitor();
         };
         updateCachedScreen();
         screenDetails.addEventListener('screenschange', updateCachedScreen);
@@ -1222,6 +1234,12 @@
         const geom = getTargetMonitorGeometry();
         const features = 'width=' + geom.width + ',height=' + geom.height + ',left=' + geom.left + ',top=' + geom.top + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
         pptWindowRef = window.open('', 'ChurchProjectorPopup_v3', features);
+        if (pptWindowRef) {
+          moveProjectorWindowToTargetMonitor();
+        }
+        if (detectedScreens.length === 0) {
+          preCacheScreenDetails(false);
+        }
       }
 
       if (pptWindowRef) {
