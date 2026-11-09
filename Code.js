@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.1 (2026/11/02 — 新增 PowerPoint 式投影監視器選單與防搜尋引擎爬蟲設定)';
+const DEV_VERSION_NOTE = 'v2.2 (2026/11/09 — 新增多重圖層預載 0 延遲翻頁與換歌三步記憶體自動釋放機制)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限

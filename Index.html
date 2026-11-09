@@ -261,6 +261,11 @@
     let copyTextFeedbackTimer = null;
     const slideInfoCache = {};
     const warmedPresentationIds = {};
+    const MAX_PRELOAD_FRAMES = 12; /* 智慧記憶體保護閥：單首簡報最多常駐 12 個預載圖層 */
+    let activeDeckRawUrl = '';
+    let slideFramePool = {}; /* pageNum -> { page, iframe, loaded } */
+    let pendingCleanupFrames = [];
+    let preloadTimerIds = [];
 
     function syncUrlWithSetlist() {
       if (typeof google !== 'undefined' && google.script && google.script.history) {
@@ -670,7 +675,7 @@
       const badgeVer = document.getElementById('devBadgeVersion');
       const noteText = (DEV_VERSION_NOTE && DEV_VERSION_NOTE.indexOf('devVersionNote') === -1)
         ? DEV_VERSION_NOTE
-        : 'v2.1 (2026/11/02 — 新增 PowerPoint 式投影監視器選單與防搜尋引擎爬蟲設定)';
+        : 'v2.2 (2026/11/09 — 新增多重圖層預載 0 延遲翻頁與換歌三步記憶體自動釋放機制)';
       if (isDev) {
         if (ribbon) ribbon.classList.remove('hidden');
         if (ribbonNote) ribbonNote.innerText = '｜版本備註：' + noteText;
@@ -812,27 +817,259 @@
     }
 
     /**
-     * 轉換為直接放映網址（支援指定跳頁 slideNum，例如 id.p3 代表第 3 頁）
+     * 轉換為直接放映網址（固定指定 slide=id.p{page} 且不加動態時間戳，讓瀏覽器共用資源快取並支援多重圖層預載）
      */
     function convertToDirectPlayUrl(rawUrl, slideNum) {
       if (!rawUrl) return '';
-      const hasExplicitSlide = (slideNum !== undefined && slideNum !== null && Number(slideNum) >= 1);
-      const page = hasExplicitSlide ? Math.floor(Number(slideNum)) : 1;
+      const page = (slideNum !== undefined && slideNum !== null && Number(slideNum) >= 1)
+        ? Math.floor(Number(slideNum))
+        : 1;
       const slideMatch = rawUrl.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
       if (slideMatch && slideMatch[1]) {
-        let url = 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false';
-        if (hasExplicitSlide) {
-          url += '&slide=id.p' + page + '&_t=' + Date.now();
-        }
-        return url;
+        return 'https://docs.google.com/presentation/d/' + slideMatch[1] + '/preview?rm=minimal&start=false&loop=false&slide=id.p' + page;
       }
       const driveMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
       if (driveMatch && driveMatch[1]) {
-        return hasExplicitSlide
-          ? ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview#page=' + page)
-          : ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview');
+        return 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview#page=' + page;
       }
       return rawUrl;
+    }
+
+    /**
+     * 取消所有進行中的背景預載排程計時器
+     */
+    function clearPreloadTimers() {
+      while (preloadTimerIds.length > 0) {
+        clearTimeout(preloadTimerIds.pop());
+      }
+    }
+
+    /**
+     * 三步徹底釋放單一簡報圖層記憶體：
+     * 1. 將 iframe.src 導向 about:blank 強制卸載 Google Slides 播放器與 GPU 緩衝區
+     * 2. 從副螢幕 DOM 移除節點
+     * 3. 切斷外部物件參照
+     */
+    function destroyIframeElement(iframeEl) {
+      if (!iframeEl) return;
+      try {
+        iframeEl.onload = null;
+        iframeEl.style.opacity = '0';
+        iframeEl.style.pointerEvents = 'none';
+        iframeEl.style.zIndex = '0';
+        iframeEl.src = 'about:blank';
+      } catch (e) {}
+      setTimeout(function() {
+        try {
+          if (iframeEl.parentNode) {
+            iframeEl.parentNode.removeChild(iframeEl);
+          }
+        } catch (e) {}
+      }, 50);
+    }
+
+    /**
+     * 清空並釋放換歌過渡期間暫留的舊詩歌圖層
+     */
+    function flushPendingCleanupFrames() {
+      while (pendingCleanupFrames.length > 0) {
+        const oldFrame = pendingCleanupFrames.pop();
+        destroyIframeElement(oldFrame);
+      }
+    }
+
+    /**
+     * 立即釋放副螢幕內所有預載圖層（於關閉視窗或強制重置時調用）
+     */
+    function releaseAllDeckFramesImmediate() {
+      clearPreloadTimers();
+      flushPendingCleanupFrames();
+      const keys = Object.keys(slideFramePool);
+      for (let i = 0; i < keys.length; i++) {
+        const entry = slideFramePool[keys[i]];
+        if (entry && entry.iframe) {
+          destroyIframeElement(entry.iframe);
+        }
+        delete slideFramePool[keys[i]];
+      }
+      slideFramePool = {};
+      activeDeckRawUrl = '';
+    }
+
+    /**
+     * 計算智慧預載頁碼優先順序（上限 MAX_PRELOAD_FRAMES = 12 頁保護閥）
+     * 優先載入：當前頁 -> 下一頁 -> 下二頁 -> 上一頁 -> 第 1 頁 -> 其餘鄰近頁
+     */
+    function computeTargetDeckPages(centerPage, totalPages) {
+      const total = Math.max(1, Math.floor(Number(totalPages) || 1));
+      const cur = Math.max(1, Math.min(total, Math.floor(Number(centerPage) || 1)));
+      const ordered = [];
+      const addPage = function(p) {
+        if (p >= 1 && p <= total && ordered.indexOf(p) === -1 && ordered.length < MAX_PRELOAD_FRAMES) {
+          ordered.push(p);
+        }
+      };
+      addPage(cur);
+      addPage(cur + 1);
+      addPage(cur + 2);
+      addPage(cur - 1);
+      addPage(1);
+      for (let offset = 2; offset <= total && ordered.length < MAX_PRELOAD_FRAMES; offset++) {
+        addPage(cur + offset);
+        addPage(cur - offset);
+      }
+      return ordered;
+    }
+
+    /**
+     * 在副螢幕的多重圖層容器中建立或取得指定頁碼的 iframe
+     */
+    function ensureSlideFrameInDeck(deckEl, rawUrl, pageNum, isActivePage, onLoadedCallback) {
+      let entry = slideFramePool[pageNum];
+      if (!entry || !entry.iframe || !entry.iframe.parentNode) {
+        const doc = deckEl.ownerDocument;
+        const iframe = doc.createElement('iframe');
+        iframe.className = 'ppt-slide-frame';
+        iframe.setAttribute('data-page', String(pageNum));
+        iframe.setAttribute('allow', 'fullscreen; autoplay');
+        iframe.setAttribute('allowfullscreen', 'true');
+        iframe.style.cssText = isActivePage
+          ? 'border:0;position:absolute;inset:0;width:100vw;height:100vh;background:#000;opacity:1;z-index:20;pointer-events:auto;'
+          : 'border:0;position:absolute;inset:0;width:100vw;height:100vh;background:#000;opacity:0;z-index:1;pointer-events:none;';
+
+        entry = {
+          page: pageNum,
+          iframe: iframe,
+          loaded: false
+        };
+        slideFramePool[pageNum] = entry;
+
+        iframe.addEventListener('load', function() {
+          entry.loaded = true;
+          try { doc.body.focus(); } catch (e) {}
+          if (onLoadedCallback) onLoadedCallback();
+          renderSlideRemoteBars();
+        });
+
+        deckEl.appendChild(iframe);
+        iframe.src = convertToDirectPlayUrl(rawUrl, pageNum);
+      } else {
+        if (onLoadedCallback && entry.loaded) {
+          onLoadedCallback();
+        }
+      }
+      return entry;
+    }
+
+    /**
+     * 排程背景預載其餘頁面（並自動清理超出 12 頁保護閥或超出真實總頁數的圖層）
+     */
+    function scheduleDeckPreload(rawUrl, centerPage, totalPages) {
+      if (!pptWindowRef || pptWindowRef.closed) return;
+      if (rawUrl !== activeDeckRawUrl) return;
+      let deckEl = null;
+      try {
+        deckEl = pptWindowRef.document.getElementById('pptDeckContainer');
+      } catch (e) {}
+      if (!deckEl) return;
+
+      clearPreloadTimers();
+      const targetPages = computeTargetDeckPages(centerPage, totalPages);
+
+      /* 若有超出真實總頁數或超出 12 頁視窗的舊圖層（但非當前顯示頁），自動執行三步記憶體釋放 */
+      Object.keys(slideFramePool).forEach(function(k) {
+        const p = Number(k);
+        if (p !== centerPage && targetPages.indexOf(p) === -1) {
+          const oldEntry = slideFramePool[p];
+          if (oldEntry && oldEntry.iframe) {
+            destroyIframeElement(oldEntry.iframe);
+          }
+          delete slideFramePool[p];
+        }
+      });
+
+      /* 依優先順序在背景逐頁預載（每頁錯開 160ms，確保不搶主畫面頻寬） */
+      let delayMs = 120;
+      targetPages.forEach(function(p) {
+        if (p === centerPage) return;
+        if (slideFramePool[p] && slideFramePool[p].iframe) return;
+        const tid = setTimeout(function() {
+          if (!pptWindowRef || pptWindowRef.closed || activeDeckRawUrl !== rawUrl) return;
+          try {
+            const curDeck = pptWindowRef.document.getElementById('pptDeckContainer');
+            if (!curDeck) return;
+            ensureSlideFrameInDeck(curDeck, rawUrl, p, (currentSlidePage === p), null);
+          } catch (e) {}
+        }, delayMs);
+        preloadTimerIds.push(tid);
+        delayMs += 160;
+      });
+    }
+
+    /**
+     * 0 延遲瞬間切換至目標頁碼圖層（若為切換新詩歌，則無縫交接並在首頁載入後立即三步釋放上一首詩歌記憶體）
+     */
+    function activateDeckSlide(rawUrl, targetPage, totalPages) {
+      if (!pptWindowRef || pptWindowRef.closed) return;
+      const deckEl = ensureProjectorShell(pptWindowRef, false);
+      if (!deckEl) return;
+
+      const isSwitchingSong = (activeDeckRawUrl !== rawUrl);
+      if (isSwitchingSong) {
+        clearPreloadTimers();
+        flushPendingCleanupFrames();
+        /* 將上一首詩歌的圖層移入待清理區：僅保留上一首當前顯示頁短暫墊底 0.6 秒防閃黑屏，其餘圖層立即釋放 */
+        Object.keys(slideFramePool).forEach(function(k) {
+          const entry = slideFramePool[k];
+          if (entry && entry.iframe) {
+            if (entry.iframe.style.opacity === '1') {
+              entry.iframe.style.zIndex = '5';
+              entry.iframe.style.pointerEvents = 'none';
+              pendingCleanupFrames.push(entry.iframe);
+            } else {
+              destroyIframeElement(entry.iframe);
+            }
+          }
+          delete slideFramePool[k];
+        });
+        slideFramePool = {};
+        activeDeckRawUrl = rawUrl;
+      }
+
+      /* 確保目標頁圖層存在，並將其瞬間切換為最上層顯示 (opacity: 1, z-index: 20) */
+      const targetEntry = ensureSlideFrameInDeck(deckEl, rawUrl, targetPage, true, function() {
+        flushPendingCleanupFrames();
+        scheduleDeckPreload(rawUrl, currentSlidePage, (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : totalPages);
+      });
+
+      /* 同步切換所有已預載圖層的顯示狀態（純記憶體圖層切換，耗時 < 1ms，完全不重新載入網頁） */
+      Object.keys(slideFramePool).forEach(function(k) {
+        const p = Number(k);
+        const entry = slideFramePool[p];
+        if (!entry || !entry.iframe) return;
+        if (p === targetPage) {
+          entry.iframe.style.opacity = '1';
+          entry.iframe.style.zIndex = '20';
+          entry.iframe.style.pointerEvents = 'auto';
+        } else {
+          entry.iframe.style.opacity = '0';
+          entry.iframe.style.zIndex = '1';
+          entry.iframe.style.pointerEvents = 'none';
+        }
+      });
+
+      if (isSwitchingSong) {
+        /* 安全保底：最遲 750ms 後強制清空上一首墊底圖層並啟動新歌背景預載 */
+        const cleanupTid = setTimeout(function() {
+          flushPendingCleanupFrames();
+          if (activeDeckRawUrl === rawUrl) {
+            scheduleDeckPreload(rawUrl, currentSlidePage, (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : totalPages);
+          }
+        }, 750);
+        preloadTimerIds.push(cleanupTid);
+      } else {
+        scheduleDeckPreload(rawUrl, targetPage, totalPages);
+      }
     }
 
     /**
@@ -864,23 +1101,23 @@
     }
 
     /**
-     * 建立或更新副螢幕專屬容器視窗（頂層不跳頁、僅切換內部 iframe，確保全螢幕 100% 不會跳出）
+     * 建立或更新副螢幕專屬容器視窗（頂層不跳頁、內部採用 #pptDeckContainer 多重預載圖層秒切，確保 0 延遲且全螢幕 100% 不跳出）
      */
     function ensureProjectorShell(win, isNewWindow) {
       const doc = win.document;
-      let frame = doc.getElementById('pptFrame');
-      if (!frame) {
+      let deckEl = doc.getElementById('pptDeckContainer');
+      if (!deckEl) {
+        slideFramePool = {};
+        activeDeckRawUrl = '';
         doc.title = '廣東道平安福音堂 - 詩歌投影幕';
         doc.documentElement.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;';
         doc.body.tabIndex = -1;
         doc.body.style.cssText = 'margin:0;padding:0;width:100vw;height:100vh;background:#000;overflow:hidden;position:relative;outline:none;';
 
-        frame = doc.createElement('iframe');
-        frame.id = 'pptFrame';
-        frame.setAttribute('allow', 'fullscreen; autoplay');
-        frame.setAttribute('allowfullscreen', 'true');
-        frame.style.cssText = 'border:0;width:100vw;height:100vh;display:block;background:#000;';
-        doc.body.appendChild(frame);
+        deckEl = doc.createElement('div');
+        deckEl.id = 'pptDeckContainer';
+        deckEl.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;background:#000;overflow:hidden;z-index:1;';
+        doc.body.appendChild(deckEl);
 
         /* 副螢幕右下角：自訂頁碼快速跳頁導覽列（直接覆蓋原本簡報右下角失效的 1|2|3|4 連結區） */
         const navBar = doc.createElement('div');
@@ -904,7 +1141,7 @@
           }
         };
 
-        /* 全天候透明互動控制層：無論在「視窗模式」或「全螢幕模式」，統一攔截滑鼠單擊／滾輪與鍵盤事件並驅動翻頁，讓主副螢幕頁碼面板 100% 即時同步更新 */
+        /* 全天候透明互動控制層：無論在「視窗模式」或「全螢幕模式」，統一攔截滑鼠單擊／滾輪與鍵盤事件並驅動 0 延遲圖層翻頁 */
         const focusGuard = doc.createElement('div');
         focusGuard.id = 'fsFocusGuard';
         focusGuard.title = '單擊翻下一頁（左側 1/4 回上一頁）｜雙擊或按 F11 進入全螢幕';
@@ -921,7 +1158,7 @@
             } else {
               stepSlidePage(1);
             }
-          }, 220);
+          }, 180);
         };
         focusGuard.ondblclick = function() {
           if (clickTimer) {
@@ -936,7 +1173,7 @@
         focusGuard.addEventListener('wheel', function(ev) {
           ev.preventDefault();
           const now = Date.now();
-          if (now - lastWheelTime < 300) return;
+          if (now - lastWheelTime < 220) return;
           lastWheelTime = now;
           if (ev.deltaY > 0) {
             stepSlidePage(1);
@@ -946,12 +1183,8 @@
         }, { passive: false });
         doc.body.appendChild(focusGuard);
 
-        frame.addEventListener('load', function() {
-          try { doc.body.focus(); } catch (e) {}
-        });
-
         win.setInterval(function() {
-          if (doc.activeElement === frame) {
+          if (doc.activeElement && doc.activeElement.tagName === 'IFRAME') {
             try { doc.body.focus(); } catch (e) {}
           }
         }, 120);
@@ -985,7 +1218,7 @@
 
         doc.body.appendChild(bar);
 
-        /* 攔截鍵盤 F11（轉為呼叫 requestFullscreen()），並在視窗與全螢幕狀態下統一支援方向鍵／空白鍵／數字鍵翻頁與頁碼同步 */
+        /* 攔截鍵盤 F11（轉為呼叫 requestFullscreen()），並在視窗與全螢幕狀態下統一支援方向鍵／空白鍵／數字鍵 0 延遲翻頁 */
         const handleKeyDown = function(e) {
           if (e.key === 'F11' || e.keyCode === 122) {
             e.preventDefault();
@@ -1025,13 +1258,15 @@
         doc.addEventListener('fullscreenchange', checkFsState);
         win.addEventListener('resize', checkFsState);
         win.addEventListener('pagehide', function() {
+          releaseAllDeckFramesImmediate();
           setTimeout(checkProjectorWindowClosed, 100);
         });
         win.addEventListener('beforeunload', function() {
+          releaseAllDeckFramesImmediate();
           setTimeout(checkProjectorWindowClosed, 100);
         });
       }
-      return frame;
+      return deckEl;
     }
 
     /**
@@ -1044,7 +1279,7 @@
     }
 
     /**
-     * 偵測副螢幕視窗是否已被關閉，若已關閉則自動隱藏主螢幕底部遙控列並重置黑屏按鈕
+     * 偵測副螢幕視窗是否已被關閉，若已關閉則立即釋放所有預載圖層參照、隱藏底部遙控列並重置黑屏按鈕
      */
     function checkProjectorWindowClosed() {
       if (!pptWindowRef || pptWindowRef.closed) {
@@ -1052,6 +1287,7 @@
           clearInterval(projectorWatchTimer);
           projectorWatchTimer = null;
         }
+        releaseAllDeckFramesImmediate();
         pptWindowRef = null;
         updateBlackoutButtonUI(false);
         const consoleBar = document.getElementById('consoleRemoteBar');
@@ -1069,7 +1305,7 @@
     }
 
     /**
-     * 同步渲染「主螢幕底部遙控列」與「副螢幕右下角導覽列」的頁碼按鈕
+     * 同步渲染「主螢幕底部遙控列」與「副螢幕右下角導覽列」的頁碼按鈕（含 0 延遲預載進度指示）
      */
     function renderSlideRemoteBars() {
       renderSetlist();
@@ -1092,12 +1328,20 @@
 
       const total = currentSlideInfo.totalPages || 1;
       const pages = currentSlideInfo.pages || [];
+      const expectedPreloadCount = Math.min(total, MAX_PRELOAD_FRAMES);
+      const loadedCount = Object.keys(slideFramePool).filter(function(k) {
+        return slideFramePool[k] && slideFramePool[k].loaded;
+      }).length;
+
       if (titleEl) {
         const prefix = currentProjectedSong.number ? ('#' + currentProjectedSong.number + ' ') : '';
         titleEl.innerText = prefix + (currentProjectedSong.title || '詩歌');
       }
       if (statusEl) {
-        statusEl.innerText = '（第 ' + currentSlidePage + ' / ' + total + ' 頁）';
+        const preloadBadge = (loadedCount >= expectedPreloadCount)
+          ? ' ⚡ 0延遲就緒'
+          : (' ⏳ 預載 ' + loadedCount + '/' + expectedPreloadCount);
+        statusEl.innerText = '（第 ' + currentSlidePage + ' / ' + total + ' 頁' + preloadBadge + '）';
       }
 
       /* 1. 更新主螢幕底部按鈕 */
@@ -1106,14 +1350,17 @@
         pages.forEach(function(pObj, idx) {
           const p = pObj.page || pObj.pageNum || (idx + 1);
           const isActive = (p === currentSlidePage);
+          const isPreloaded = !!(slideFramePool[p] && slideFramePool[p].loaded);
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = isActive
             ? 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-purple-600 text-white ring-2 ring-purple-300 shadow-sm transition-all cursor-pointer'
-            : 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-all cursor-pointer';
+            : (isPreloaded
+                ? 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-600/60 transition-all cursor-pointer'
+                : 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-all cursor-pointer');
           btn.innerText = pObj.verseLabel ? (p + ' (' + pObj.verseLabel + ')') : String(p);
           if (pObj.snippet) {
-            btn.title = '第 ' + p + ' 頁：' + pObj.snippet;
+            btn.title = '第 ' + p + ' 頁' + (isPreloaded ? '（⚡已預載 0延遲）' : '') + '：' + pObj.snippet;
           }
           btn.onclick = function() {
             jumpToSlidePage(p);
@@ -1169,7 +1416,7 @@
     }
 
     /**
-     * 直接跳轉至目前投影片的指定頁碼（保持全螢幕不跳出）
+     * 直接跳轉至目前投影片的指定頁碼（透過多重預載圖層 0 延遲瞬間切換，不重載網頁、不跳出全螢幕）
      */
     function jumpToSlidePage(pageNum) {
       if (!currentProjectedSong || !currentProjectedSong.pptUrl) return;
@@ -1177,15 +1424,13 @@
       const targetPage = Math.max(1, Math.min(total, Math.floor(Number(pageNum) || 1)));
       currentSlidePage = targetPage;
 
-      const playUrl = convertToDirectPlayUrl(currentProjectedSong.pptUrl, targetPage);
       if (pptWindowRef && !pptWindowRef.closed) {
         try {
-          const frame = ensureProjectorShell(pptWindowRef, false);
+          ensureProjectorShell(pptWindowRef, false);
           const standby = pptWindowRef.document.getElementById('standbyOverlay');
           if (standby) standby.style.display = 'none';
           updateBlackoutButtonUI(false);
-          frame.style.display = 'block';
-          frame.src = playUrl;
+          activateDeckSlide(currentProjectedSong.pptUrl, targetPage, total);
         } catch (e) {}
       } else {
         openPPTOnSecondScreen(currentProjectedSong.pptUrl, null, currentProjectedSong.id, targetPage);
@@ -1201,6 +1446,7 @@
       if (!currentProjectedSong) return;
       const total = (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : 1;
       const next = Math.max(1, Math.min(total, currentSlidePage + Number(delta || 0)));
+      if (next === currentSlidePage) return;
       jumpToSlidePage(next);
     }
 
@@ -1225,7 +1471,14 @@
       currentSlidePage = (initialPage && Number(initialPage) >= 1) ? Math.floor(Number(initialPage)) : 1;
       consoleRemoteDismissed = false;
 
-      const playUrl = convertToDirectPlayUrl(rawUrl, initialPage);
+      /* 先備妥此首詩歌的預設或快取頁數資訊，供多重圖層預載引擎使用 */
+      if (slideInfoCache[rawUrl]) {
+        currentSlideInfo = slideInfoCache[rawUrl];
+      } else {
+        currentSlideInfo = buildFallbackSlideInfo(rawUrl, currentProjectedSong.lyrics);
+      }
+      const initialTotalPages = (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : 4;
+
       let isNewWindow = false;
 
       if (!pptWindowRef || pptWindowRef.closed) {
@@ -1246,27 +1499,22 @@
         startProjectorWindowWatcher();
         const docId = extractPresentationId(rawUrl);
         const isAlreadyWarmed = (!docId || warmedPresentationIds[docId] === true);
-        const loadFramePlayUrl = function(frameEl) {
-          if (isAlreadyWarmed) {
-            frameEl.src = playUrl;
-          } else {
-            warmupPresentationCache(rawUrl).then(function() {
-              if (currentProjectedSong && currentProjectedSong.pptUrl === rawUrl && pptWindowRef && !pptWindowRef.closed) {
-                try {
-                  const targetFrame = pptWindowRef.document.getElementById('pptFrame') || frameEl;
-                  targetFrame.src = convertToDirectPlayUrl(rawUrl, currentSlidePage);
-                } catch (e) {}
-              }
-            });
-          }
+        const launchDeckForSong = function() {
+          if (!currentProjectedSong || currentProjectedSong.pptUrl !== rawUrl || !pptWindowRef || pptWindowRef.closed) return;
+          const totalNow = (currentSlideInfo && currentSlideInfo.totalPages) ? currentSlideInfo.totalPages : initialTotalPages;
+          activateDeckSlide(rawUrl, currentSlidePage, totalNow);
+          renderSlideRemoteBars();
         };
         try {
-          const frame = ensureProjectorShell(pptWindowRef, isNewWindow);
+          ensureProjectorShell(pptWindowRef, isNewWindow);
           const standby = pptWindowRef.document.getElementById('standbyOverlay');
           if (standby) standby.style.display = 'none';
           updateBlackoutButtonUI(false);
-          frame.style.display = 'block';
-          loadFramePlayUrl(frame);
+          if (isAlreadyWarmed) {
+            launchDeckForSong();
+          } else {
+            warmupPresentationCache(rawUrl).then(launchDeckForSong);
+          }
           /* 僅在首次新開視窗時 focus 外層以支援直接按 F11，切換詩歌時不搶焦點 */
           if (isNewWindow) {
             pptWindowRef.focus();
@@ -1275,36 +1523,37 @@
         } catch (err) {
           pptWindowRef.location.href = 'about:blank';
           setTimeout(function() {
-            const frame = ensureProjectorShell(pptWindowRef, true);
+            ensureProjectorShell(pptWindowRef, true);
             updateBlackoutButtonUI(false);
-            loadFramePlayUrl(frame);
-            renderSlideRemoteBars();
+            if (isAlreadyWarmed) {
+              launchDeckForSong();
+            } else {
+              warmupPresentationCache(rawUrl).then(launchDeckForSong);
+            }
           }, 150);
         }
       } else {
         alert('彈出視窗被攔截！請點擊瀏覽器網址列右方的「攔截圖示」，選擇「永遠允許彈出式視窗」。');
       }
 
-      /* 立即以快取或預設段落顯示頁碼按鈕，隨後背景讀取真實 .ppt 總頁數與節數標記並自動更新 */
-      if (slideInfoCache[rawUrl]) {
-        currentSlideInfo = slideInfoCache[rawUrl];
-        renderSlideRemoteBars();
-      } else {
-        currentSlideInfo = buildFallbackSlideInfo(rawUrl, currentProjectedSong.lyrics);
-        renderSlideRemoteBars();
+      /* 立即渲染頁碼遙控列，若尚未快取真實 .ppt 頁數則於背景讀取並同步更新預載範圍 */
+      renderSlideRemoteBars();
+      if (!slideInfoCache[rawUrl]) {
         const targetUrl = rawUrl;
+        const onSlideInfoLoaded = function(info) {
+          if (info && info.totalPages) {
+            slideInfoCache[targetUrl] = info;
+            if (currentProjectedSong && currentProjectedSong.pptUrl === targetUrl) {
+              currentSlideInfo = info;
+              if (currentSlidePage > info.totalPages) currentSlidePage = info.totalPages;
+              scheduleDeckPreload(targetUrl, currentSlidePage, info.totalPages);
+              renderSlideRemoteBars();
+            }
+          }
+        };
         if (typeof google !== 'undefined' && google.script && google.script.run) {
           google.script.run
-            .withSuccessHandler(function(info) {
-              if (info && info.totalPages) {
-                slideInfoCache[targetUrl] = info;
-                if (currentProjectedSong && currentProjectedSong.pptUrl === targetUrl) {
-                  currentSlideInfo = info;
-                  if (currentSlidePage > info.totalPages) currentSlidePage = info.totalPages;
-                  renderSlideRemoteBars();
-                }
-              }
-            })
+            .withSuccessHandler(onSlideInfoLoaded)
             .getPresentationSlideInfo(rawUrl, currentProjectedSong.lyrics || '');
         } else {
           const slideApiUrl = getBackendApiBaseUrl() +
@@ -1312,16 +1561,7 @@
             '&lyrics=' + encodeURIComponent(currentProjectedSong.lyrics || '');
           fetch(slideApiUrl)
             .then(function(res) { return res.json(); })
-            .then(function(info) {
-              if (info && info.totalPages) {
-                slideInfoCache[targetUrl] = info;
-                if (currentProjectedSong && currentProjectedSong.pptUrl === targetUrl) {
-                  currentSlideInfo = info;
-                  if (currentSlidePage > info.totalPages) currentSlidePage = info.totalPages;
-                  renderSlideRemoteBars();
-                }
-              }
-            })
+            .then(onSlideInfoLoaded)
             .catch(function() {});
         }
       }
