@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.2 (2026/11/09 — 新增多重圖層預載 0 延遲翻頁與換歌三步記憶體自動釋放機制)';
+const DEV_VERSION_NOTE = 'v2.2.1 (2026/11/11 — 修正 getSlideInfo 安全性：僅允許讀取詩歌資料庫內登記之簡報檔案)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
@@ -106,12 +106,51 @@ function getSongsData(isAdmin) {
  * 自動解析簡報頁數、各頁歌詞摘要與原 PPT 節數跳頁目標
  * 僅使用專案已授權之 DriveApp 讀取檔案結構，不新增額外 OAuth Scope
  */
+function extractDriveId_(url) {
+  if (!url) return '';
+  const m = String(url).match(/\/(?:presentation|file)\/d\/([a-zA-Z0-9-_]+)/) ||
+            String(url).match(/[?&]id=([a-zA-Z0-9-_]+)/);
+  return (m && m[1]) ? m[1] : '';
+}
+
+/**
+ * 白名單：僅允許讀取《詩歌資料庫》試算表內登記過的簡報檔案 ID，
+ * 防止匿名呼叫者以部署者權限讀取 Drive 中任意檔案內容。
+ * （結果快取 10 分鐘；試算表新增詩歌後最遲 10 分鐘生效）
+ */
+function getAllowedPptIds_() {
+  const cache = CacheService.getScriptCache();
+  const CACHE_KEY = 'allowedPptIds_v1';
+  const cached = cache.get(CACHE_KEY);
+  if (cached) return new Set(cached.split(','));
+
+  const ids = new Set();
+  const sheet = SpreadsheetApp.openById('15pOhnHrf0DB-C2OgHuVFD4XfanXsNrJuUHniyuBDFPI')
+    .getSheetByName('詩歌資料庫');
+  if (sheet) {
+    const data = sheet.getDataRange().getValues();
+    for (let r = 1; r < data.length; r++) {
+      // F 欄（index 5）；誤切欄位時 PPT 連結位於 G 欄（index 6）
+      for (let c = 5; c <= 6 && c < data[r].length; c++) {
+        const id = extractDriveId_(data[r][c]);
+        if (id) ids.add(id);
+      }
+    }
+  }
+  const joined = Array.from(ids).join(',');
+  if (joined.length < 90000) cache.put(CACHE_KEY, joined, 600);
+  return ids;
+}
+
 function getPresentationSlideInfo(pptUrl, fallbackLyrics) {
-  let docId = '';
-  if (pptUrl) {
-    const m = String(pptUrl).match(/\/(?:presentation|file)\/d\/([a-zA-Z0-9-_]+)/) ||
-              String(pptUrl).match(/[?&]id=([a-zA-Z0-9-_]+)/);
-    if (m && m[1]) docId = m[1];
+  let docId = extractDriveId_(pptUrl);
+  if (docId) {
+    try {
+      if (!getAllowedPptIds_().has(docId)) docId = '';
+    } catch (err) {
+      Logger.log('白名單讀取失敗: ' + err.toString());
+      docId = '';
+    }
   }
 
   let totalPages = 0;
