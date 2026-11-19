@@ -112,7 +112,7 @@
           <span id="setlistEmptyHint" class="text-xs text-amber-700/90">點擊下方詩歌卡片右上角的「📌 釘選」即可預先排定當日崇拜詩歌（最多 10 首）</span>
         </div>
         <div id="setlistHeaderActions" class="hidden flex-wrap items-center gap-2 self-end sm:self-auto">
-          <button type="button" id="copySetlistTextBtn" onclick="copySetlistWhatsAppText()" class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer" title="一鍵複製適合貼到 WhatsApp / 崇拜群組的文字版歌單清單（含曲目順序、編號、歌名與歌單連結）">
+          <button type="button" id="copySetlistTextBtn" onclick="copySetlistWhatsAppText()" class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer" title="一鍵複製適合貼到 WhatsApp / 崇拜群組的文字版歌單清單（含曲目順序、編號、歌名，以及同工與樂手兩條專屬連結）">
             <i class="fa-brands fa-whatsapp text-sm" id="copySetlistTextIcon"></i> <span id="copySetlistTextLabel">複製 WhatsApp 歌單</span>
           </button>
           <button type="button" id="copySetlistLinkBtn" onclick="copySetlistShareLink()" class="px-3 py-1 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer" title="僅複製今日崇拜歌單專屬網址連結">
@@ -121,7 +121,7 @@
           <button type="button" id="toggleSetlistBtn" onclick="toggleSetlistCollapse()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 transition-all flex items-center gap-1 cursor-pointer">
             <i class="fa-solid fa-chevron-up" id="toggleSetlistIcon"></i> <span id="toggleSetlistText">收合</span>
           </button>
-          <button type="button" onclick="clearSetlist()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-red-50 text-red-600 border border-red-200 transition-all flex items-center gap-1 cursor-pointer" title="清空全部已釘選詩歌">
+          <button type="button" id="clearSetlistBtn" onclick="clearSetlist()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-red-50 text-red-600 border border-red-200 transition-all flex items-center gap-1 cursor-pointer" title="清空全部已釘選詩歌">
             <i class="fa-solid fa-trash-can"></i> 清空歌單
           </button>
         </div>
@@ -228,6 +228,15 @@
     const IS_ADMIN = ("<?= isAdmin ?>" === "true") ||
                      (URL_PARAMS.get('pass') === 'admin') ||
                      (URL_PARAMS.get('mode') === 'admin');
+    /* 樂手模式：?view=musician（或 role=musician、mode=musician）不需同工密碼即可查看歌詞與歌譜 PDF */
+    const IS_MUSICIAN = ("<?= isMusician ?>" === "true") ||
+                        (URL_PARAMS.get('view') === 'musician') ||
+                        (URL_PARAMS.get('role') === 'musician') ||
+                        (URL_PARAMS.get('mode') === 'musician');
+    const RAW_INITIAL_ROLE = "<?= initialRole ?>";
+    const INITIAL_ROLE = (['av', 'musician', 'congregation'].indexOf(RAW_INITIAL_ROLE) !== -1)
+      ? RAW_INITIAL_ROLE
+      : (IS_ADMIN ? (IS_MUSICIAN ? 'musician' : 'av') : (IS_MUSICIAN ? 'musician' : 'congregation'));
     const RAW_INITIAL_SETLIST = "<?= initialSetlist ?>";
     const INITIAL_SETLIST = (RAW_INITIAL_SETLIST && RAW_INITIAL_SETLIST.indexOf('initialSetlist') === -1)
       ? RAW_INITIAL_SETLIST
@@ -243,7 +252,7 @@
     const DEV_DEPLOY_ID = 'AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl';
     
     let allSongs = [];
-    let currentRole = IS_ADMIN ? 'av' : 'congregation'; 
+    let currentRole = INITIAL_ROLE;
     let selectedCategory = 'ALL';
     let selectedCharCount = 0;
     let cachedOtherScreen = null;
@@ -270,7 +279,7 @@
     function syncUrlWithSetlist() {
       if (typeof google !== 'undefined' && google.script && google.script.history) {
         try {
-          const params = { pass: 'admin' };
+          const params = IS_ADMIN ? { pass: 'admin' } : (IS_MUSICIAN ? { view: 'musician' } : {});
           if (setlistSongIds.length > 0) {
             params.setlist = setlistSongIds.join(',');
           }
@@ -313,9 +322,9 @@
     }
 
     /**
-     * 取得今日崇拜歌單專屬分享網址
+     * 取得今日崇拜歌單專屬分享網址（forRole = 'musician' 時產生樂手歌譜連結，否則為同工投影連結）
      */
-    function getSetlistShareUrl() {
+    function getSetlistShareUrl(forRole) {
       let baseUrl = DEFAULT_WEBAPP_EXEC_URL;
       try {
         const parentRef = (window.parent && window.parent !== window && window.parent.document) ? window.parent.document.referrer : '';
@@ -326,6 +335,9 @@
           baseUrl = ref.split('?')[0];
         }
       } catch (e) {}
+      if (forRole === 'musician') {
+        return baseUrl + '?view=musician&setlist=' + setlistSongIds.join(',');
+      }
       return baseUrl + '?pass=admin&setlist=' + setlistSongIds.join(',');
     }
 
@@ -396,14 +408,18 @@
         return (idx + 1) + '. 【' + catNum + '】' + song.title;
       });
 
-      const shareUrl = getSetlistShareUrl();
+      const shareUrlAdmin = getSetlistShareUrl('admin');
+      const shareUrlMusician = getSetlistShareUrl('musician');
       const messageText = [
         '🎵 *廣東道平安福音堂 — 今日崇拜歌單* (' + dateStr + ')',
         '━━━━━━━━━━━━━━',
         songLines.join('\n'),
         '━━━━━━━━━━━━━━',
-        '🔗 *歌單專屬連結（影音 PPT ／ 樂手歌譜）：*',
-        shareUrl
+        '🔗 *同工投影專屬連結：*',
+        shareUrlAdmin,
+        '',
+        '🎼 *樂手歌譜專屬連結：*',
+        shareUrlMusician
       ].join('\n');
 
       copyTextToClipboard(messageText, function() {
@@ -432,7 +448,7 @@
         return;
       }
 
-      const shareUrl = getSetlistShareUrl();
+      const shareUrl = getSetlistShareUrl('admin');
 
       copyTextToClipboard(shareUrl, function() {
         const btn = document.getElementById('copySetlistLinkBtn');
@@ -713,7 +729,7 @@
       const monitorWrap = document.getElementById('monitorPickerWrap');
       if (IS_ADMIN) {
         document.getElementById('adminNav').classList.remove('hidden');
-        document.getElementById('blackoutBtn').classList.remove('hidden');
+        if (currentRole === 'av') document.getElementById('blackoutBtn').classList.remove('hidden');
         document.getElementById('helpBtn').classList.remove('hidden');
         if (monitorWrap && currentRole === 'av') {
           monitorWrap.classList.remove('hidden');
@@ -721,6 +737,29 @@
         }
         document.getElementById('worshipSetlistSection').classList.remove('hidden');
         document.getElementById('appTitle').innerText = '詩歌檢索控制台 (同工版)';
+        ['av', 'musician', 'congregation'].forEach(r => {
+          const btn = document.getElementById(`tab-${r}`);
+          if (btn) {
+            btn.className = (r === currentRole)
+              ? "px-3 py-2 rounded-lg text-sm transition-all active-tab bg-white shadow-sm"
+              : "px-3 py-2 rounded-lg text-sm transition-all text-slate-600 hover:bg-slate-200";
+          }
+        });
+      } else if (IS_MUSICIAN) {
+        /* 樂手版：只顯示歌詞與歌譜；有歌單連結（?setlist=）時顯示唯讀的今日崇拜歌單 */
+        document.getElementById('adminNav').classList.add('hidden');
+        document.getElementById('blackoutBtn').classList.add('hidden');
+        document.getElementById('helpBtn').classList.add('hidden');
+        if (monitorWrap) {
+          monitorWrap.classList.add('hidden');
+          monitorWrap.classList.remove('flex');
+        }
+        if (setlistSongIds.length > 0) {
+          document.getElementById('worshipSetlistSection').classList.remove('hidden');
+        } else {
+          document.getElementById('worshipSetlistSection').classList.add('hidden');
+        }
+        document.getElementById('appTitle').innerText = '詩歌檢索系統 (樂手歌譜歌詞版)';
       } else {
         document.getElementById('adminNav').classList.add('hidden');
         document.getElementById('blackoutBtn').classList.add('hidden');
@@ -746,10 +785,10 @@
             document.getElementById('resultCount').innerText = '資料讀取失敗：' + errMsg;
             document.getElementById('loadingSpinner').classList.add('hidden');
           })
-          .getSongsData(IS_ADMIN);
+          .getSongsData(IS_ADMIN, IS_MUSICIAN);
       } else {
         /* 頂層獨立網頁模式 (如 GitHub Pages)：自動透過 GAS JSON API 載入詩歌資料 */
-        const apiUrl = getBackendApiBaseUrl() + '?action=getSongs' + (IS_ADMIN ? '&pass=admin' : '');
+        const apiUrl = getBackendApiBaseUrl() + '?action=getSongs' + (IS_ADMIN ? '&pass=admin' : '') + (IS_MUSICIAN ? '&view=musician' : '');
         fetch(apiUrl)
           .then(function(res) { return res.json(); })
           .then(function(payload) {
@@ -1666,9 +1705,11 @@
       renderSlideRemoteBars();
       ['av', 'musician', 'congregation'].forEach(r => {
         const btn = document.getElementById(`tab-${r}`);
-        btn.className = (r === role) 
-          ? "px-3 py-2 rounded-lg text-sm transition-all active-tab bg-white shadow-sm"
-          : "px-3 py-2 rounded-lg text-sm transition-all text-slate-600 hover:bg-slate-200";
+        if (btn) {
+          btn.className = (r === role)
+            ? "px-3 py-2 rounded-lg text-sm transition-all active-tab bg-white shadow-sm"
+            : "px-3 py-2 rounded-lg text-sm transition-all text-slate-600 hover:bg-slate-200";
+        }
       });
       render();
     }
@@ -1780,7 +1821,7 @@
     }
 
     function renderSetlist() {
-      if (!IS_ADMIN) return;
+      if (!IS_ADMIN && !IS_MUSICIAN) return;
       const section = document.getElementById('worshipSetlistSection');
       const countBadge = document.getElementById('setlistCountBadge');
       const emptyHint = document.getElementById('setlistEmptyHint');
@@ -1801,6 +1842,11 @@
       }
 
       if (pinnedSongs.length === 0) {
+        if (!IS_ADMIN) {
+          /* 樂手版沒有歌單時整個區塊隱藏 */
+          section.classList.add('hidden');
+          return;
+        }
         if (emptyHint) emptyHint.classList.remove('hidden');
         if (headerActions) {
           headerActions.classList.add('hidden');
@@ -1811,11 +1857,19 @@
         return;
       }
 
+      section.classList.remove('hidden');
       if (emptyHint) emptyHint.classList.add('hidden');
-      warmupSetlistPresentations(pinnedSongs);
+      if (IS_ADMIN) warmupSetlistPresentations(pinnedSongs);
       if (headerActions) {
         headerActions.classList.remove('hidden');
         headerActions.classList.add('flex');
+      }
+      if (!IS_ADMIN) {
+        /* 樂手版為唯讀歌單：隱藏複製歌單、複製連結與清空按鈕 */
+        ['copySetlistTextBtn', 'copySetlistLinkBtn', 'clearSetlistBtn'].forEach(function(id) {
+          const b = document.getElementById(id);
+          if (b) b.classList.add('hidden');
+        });
       }
 
       if (toggleIcon && toggleText) {
@@ -1867,6 +1921,7 @@
 
         topRow.appendChild(leftBadgeGroup);
 
+        if (IS_ADMIN) {
         const rightControls = document.createElement('div');
         rightControls.className = 'flex items-center gap-1 shrink-0';
 
@@ -1901,6 +1956,7 @@
         rightControls.appendChild(rmBtn);
 
         topRow.appendChild(rightControls);
+        } /* 排序與移除按鈕只限同工版 */
         item.appendChild(topRow);
 
         const titleEl = document.createElement('div');
@@ -1919,11 +1975,16 @@
           };
           item.appendChild(projBtn);
         } else if (currentRole === 'musician') {
+          const lyrPreview = document.createElement('div');
+          lyrPreview.className = 'bg-slate-50 p-2 rounded-lg text-xs text-slate-600 max-h-20 overflow-y-auto whitespace-pre-wrap leading-relaxed';
+          lyrPreview.innerText = (song.lyrics || '暫無歌詞資料').trim();
+          item.appendChild(lyrPreview);
+
           const pdfLink = document.createElement('a');
           pdfLink.href = song.pdfUrl || '#';
           pdfLink.target = '_blank';
-          pdfLink.className = (song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 pointer-events-none') + ' text-white text-center py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 w-full';
-          pdfLink.innerHTML = '<i class="fa-solid fa-file-pdf"></i> 查看歌譜 (PDF)';
+          pdfLink.className = (song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer' : 'bg-slate-300 pointer-events-none') + ' text-white text-center py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 w-full';
+          pdfLink.innerHTML = '<i class="fa-solid fa-file-pdf"></i> ' + (song.pdfUrl ? '查看歌譜 (PDF)' : '暫無歌譜');
           item.appendChild(pdfLink);
         } else {
           const lyrPreview = document.createElement('div');
@@ -2003,13 +2064,14 @@
               <i class="fa-solid fa-file-powerpoint"></i> 開啟 PPT 簡報 (副螢幕)
             </button>
           `;
-        } else if (currentRole === 'musician' && IS_ADMIN) {
-          /* 已移除歌譜位置黃框，僅保留歌譜連結。 */
+        } else if (currentRole === 'musician') {
+          /* 樂手版（同工切換至樂手分頁，或 ?view=musician）：同時呈現歌詞內容與「查看歌譜 (PDF)」按鈕 */
           bodyHtml = `
             ${headerHtml}
-            <a href="${song.pdfUrl || '#'}" target="_blank" 
-               class="${song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2">
-              <i class="fa-solid fa-file-pdf"></i> 查看歌譜 (PDF)
+            <div class="bg-slate-50 p-3 rounded-xl text-sm text-slate-700 max-h-52 overflow-y-auto whitespace-pre-wrap leading-relaxed">${(song.lyrics || '暫無歌詞資料').trim()}</div>
+            <a href="${song.pdfUrl || '#'}" target="_blank"
+               class="${song.pdfUrl ? 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer' : 'bg-slate-300 pointer-events-none'} text-white text-center py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 w-full mt-2 shadow-xs">
+              <i class="fa-solid fa-file-pdf"></i> ${song.pdfUrl ? '查看歌譜 (PDF)' : '暫無歌譜'}
             </a>
           `;
         } else {

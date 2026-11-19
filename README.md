@@ -101,6 +101,7 @@
 - **Script ID**：`17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz`
 - **Deployment ID**：`AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl`
 - **同工版測試網址**：`https://script.google.com/a/macros/johnnyworks.biz/s/AKfycbzd2noWSnN27y31P30F7J2OUVNye1HSsM21qfI8i7uRR-0_9_KzJ3i827sB5RxcX0sl/exec?pass=admin`
+- **樂手版測試網址**：同上，將 `?pass=admin` 改為 `?view=musician`
 - **GAS 編輯器網址**：`https://script.google.com/home/projects/17NB2HOnZ0LoIm-nn38KzmakjmULLrwm86KmJsFCkmN9gUmPTuy6e3nOz/edit`
 
 ```bash
@@ -121,6 +122,7 @@ git push origin main
 - **Script ID**：`1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI`
 - **Deployment ID**：`AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg`
 - **同工版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?pass=admin`
+- **樂手版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?view=musician`（不需同工密碼，可看歌詞與歌譜 PDF，不含 PPT；加 `&setlist=…` 會顯示唯讀的今日崇拜歌單）
 - **GAS 編輯器網址**：`https://script.google.com/u/0/home/projects/1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI/edit`
 
 ```bash

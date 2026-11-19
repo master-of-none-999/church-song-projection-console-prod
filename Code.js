@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.3.4 (2026/11/19 14:44 — 待確認更新新增「套用新連結」剔選、加闊欄位並正確顯示 Google 文件名稱)';
+const DEV_VERSION_NOTE = 'v2.4 (2026/11/19 15:36 — 移植正式版樂手模式（?view=musician 可看歌詞與歌譜、唯讀歌單、WhatsApp 歌單附樂手連結）)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
@@ -9,11 +9,22 @@ function doGet(e) {
     isAdmin = true;
   }
 
+  // 樂手模式：網址傳入 ?view=musician（或 role=musician、mode=musician）時，不需同工密碼即可查看歌譜 PDF（不含 PPT）
+  const viewParam = String((e && e.parameter && (e.parameter.view || e.parameter.role || e.parameter.mode)) || '');
+  const isMusician = viewParam.toLowerCase() === 'musician';
+  let initialRole = 'congregation';
+  if (isAdmin) {
+    initialRole = isMusician ? 'musician' : 'av';
+  } else if (isMusician) {
+    initialRole = 'musician';
+  }
+
   // 支援頂層獨立網頁 (GitHub Pages) 透過 JSON API 讀取詩歌與簡報頁數資料
   if (e && e.parameter && e.parameter.action === 'getSongs') {
-    const songs = getSongsData(isAdmin);
+    const songs = getSongsData(isAdmin, isMusician);
     return ContentService.createTextOutput(JSON.stringify({
       isAdmin: isAdmin,
+      isMusician: isMusician,
       isDevEnv: IS_DEV_ENV,
       devVersionNote: DEV_VERSION_NOTE,
       songs: songs
@@ -34,18 +45,28 @@ function doGet(e) {
 
   const template = HtmlService.createTemplateFromFile('Index');
   template.isAdmin = isAdmin;
+  template.isMusician = isMusician;
+  template.initialRole = initialRole;
   template.initialSetlist = initialSetlist;
   template.isDevEnv = IS_DEV_ENV;
   template.devVersionNote = DEV_VERSION_NOTE;
 
-  const baseTitle = isAdmin ? '教會詩歌檢索系統 (同工控制台)' : '教會詩歌檢索 (會眾歌詞版)';
+  let baseTitle = '教會詩歌檢索 (會眾歌詞版)';
+  if (isAdmin) {
+    baseTitle = '教會詩歌檢索系統 (同工控制台)';
+  } else if (isMusician) {
+    baseTitle = '教會詩歌檢索 (樂手歌譜歌詞版)';
+  }
   return template.evaluate()
     .setTitle(IS_DEV_ENV ? ('[開發版] ' + baseTitle) : baseTitle)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function getSongsData(isAdmin) {
+function getSongsData(isAdmin, isMusician) {
+  // 影音 PPT 僅同工可讀取；樂手歌譜 PDF 同工與樂手（?view=musician）皆可讀取
+  const canAccessPpt = Boolean(isAdmin);
+  const canAccessPdf = Boolean(isAdmin || isMusician);
   try {
     const ss = SpreadsheetApp.openById('15pOhnHrf0DB-C2OgHuVFD4XfanXsNrJuUHniyuBDFPI'); 
     const sheet = ss.getSheetByName('詩歌資料庫');
@@ -63,9 +84,9 @@ function getSongsData(isAdmin) {
       let title = String(row[2] || '').trim();
       let charCountVal = row[3];
       let lyrics = String(row[4] || '').trim();
-      let pptUrl = isAdmin ? String(row[5] || '').trim() : '';
-      let pdfUrl = isAdmin ? String(row[6] || '').trim() : '';
-      let pdfNote = isAdmin ? String(row[7] || '').trim() : '';
+      let pptUrl = canAccessPpt ? String(row[5] || '').trim() : '';
+      let pdfUrl = canAccessPdf ? String(row[6] || '').trim() : '';
+      let pdfNote = canAccessPdf ? String(row[7] || '').trim() : '';
 
       // 自動補回誤切欄位
       if (/^\d{1,2}$/.test(title) && number.length >= 3) {
@@ -73,9 +94,9 @@ function getSongsData(isAdmin) {
         title = String(row[3] || '').trim();
         charCountVal = row[4];
         lyrics = String(row[5] || '').trim();
-        pptUrl = isAdmin ? String(row[6] || '').trim() : '';
-        pdfUrl = isAdmin ? String(row[7] || '').trim() : '';
-        pdfNote = isAdmin ? String(row[8] || '').trim() : '';
+        pptUrl = canAccessPpt ? String(row[6] || '').trim() : '';
+        pdfUrl = canAccessPdf ? String(row[7] || '').trim() : '';
+        pdfNote = canAccessPdf ? String(row[8] || '').trim() : '';
       }
 
       if (number.toUpperCase().startsWith('A')) {
