@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.2.1 (2026/11/11 — 修正 getSlideInfo 安全性：僅允許讀取詩歌資料庫內登記之簡報檔案)';
+const DEV_VERSION_NOTE = 'v2.2.2 (2026/11/19 — 簡報白名單快取縮短至 2 分鐘，新增詩歌找不到時即時重讀試算表，頁數偵測立即生效)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
@@ -116,13 +116,20 @@ function extractDriveId_(url) {
 /**
  * 白名單：僅允許讀取《詩歌資料庫》試算表內登記過的簡報檔案 ID，
  * 防止匿名呼叫者以部署者權限讀取 Drive 中任意檔案內容。
- * （結果快取 10 分鐘；試算表新增詩歌後最遲 10 分鐘生效）
+ * （結果快取 2 分鐘；若在快取名單中找不到，isAllowedPptId_ 會即時重新讀取試算表，新增詩歌可立即生效）
  */
-function getAllowedPptIds_() {
+const ALLOWED_IDS_CACHE_KEY_ = 'allowedPptIds_v1';
+const ALLOWED_IDS_CACHE_SECONDS_ = 120;
+const ALLOWED_IDS_REFRESH_LOCK_KEY_ = 'allowedPptIds_refreshLock_v1';
+const ALLOWED_IDS_REFRESH_MIN_SECONDS_ = 15;
+
+function getAllowedPptIds_(forceRefresh) {
   const cache = CacheService.getScriptCache();
-  const CACHE_KEY = 'allowedPptIds_v1';
-  const cached = cache.get(CACHE_KEY);
-  if (cached) return new Set(cached.split(','));
+  const CACHE_KEY = ALLOWED_IDS_CACHE_KEY_;
+  if (!forceRefresh) {
+    const cached = cache.get(CACHE_KEY);
+    if (cached) return new Set(cached.split(','));
+  }
 
   const ids = new Set();
   const sheet = SpreadsheetApp.openById('15pOhnHrf0DB-C2OgHuVFD4XfanXsNrJuUHniyuBDFPI')
@@ -138,15 +145,29 @@ function getAllowedPptIds_() {
     }
   }
   const joined = Array.from(ids).join(',');
-  if (joined.length < 90000) cache.put(CACHE_KEY, joined, 600);
+  if (joined.length < 90000) cache.put(CACHE_KEY, joined, ALLOWED_IDS_CACHE_SECONDS_);
   return ids;
+}
+
+/**
+ * 檢查簡報 ID 是否登記於試算表。快取名單找不到時（例如同工剛新增詩歌），即時重新讀取一次試算表。
+ * 為避免匿名呼叫者以不存在的 ID 反覆觸發讀取試算表，強制重讀最多每 15 秒一次。
+ */
+function isAllowedPptId_(docId) {
+  if (!docId) return false;
+  if (getAllowedPptIds_(false).has(docId)) return true;
+
+  const cache = CacheService.getScriptCache();
+  if (cache.get(ALLOWED_IDS_REFRESH_LOCK_KEY_)) return false;
+  cache.put(ALLOWED_IDS_REFRESH_LOCK_KEY_, '1', ALLOWED_IDS_REFRESH_MIN_SECONDS_);
+  return getAllowedPptIds_(true).has(docId);
 }
 
 function getPresentationSlideInfo(pptUrl, fallbackLyrics) {
   let docId = extractDriveId_(pptUrl);
   if (docId) {
     try {
-      if (!getAllowedPptIds_().has(docId)) docId = '';
+      if (!isAllowedPptId_(docId)) docId = '';
     } catch (err) {
       Logger.log('白名單讀取失敗: ' + err.toString());
       docId = '';
