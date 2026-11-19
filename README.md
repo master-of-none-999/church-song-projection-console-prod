@@ -123,6 +123,11 @@ git push origin main
 - **Deployment ID**：`AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg`
 - **同工版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?pass=admin`
 - **樂手版正式網址**：`https://script.google.com/macros/s/AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg/exec?view=musician`（不需同工密碼，可看歌詞與歌譜 PDF，不含 PPT；加 `&setlist=…` 會顯示唯讀的今日崇拜歌單）
+- **正式版 GitHub 網頁**（`prod` 儲存庫 GitHub Pages，main 分支根目錄；路徑含 `-prod` 時自動連接正式版後端）：
+  - 同工版：`https://master-of-none-999.github.io/church-song-projection-console-prod/Index.html?pass=admin`
+  - 樂手版：`https://master-of-none-999.github.io/church-song-projection-console-prod/Index.html?view=musician`
+  - 會眾版：`https://master-of-none-999.github.io/church-song-projection-console-prod/Index.html`
+- （`https://master-of-none-999.github.io/church-song-projection-console/` 為**開發版**網頁，連接開發測試副本後端，請勿用於崇拜。）
 - **GAS 編輯器網址**：`https://script.google.com/u/0/home/projects/1qQ1cKb1oxJBr2ZAINjH6Zq1fNEa8_yICcHfruh5qDsj77vVnzo-3Z5uI/edit`
 
 ```bash
