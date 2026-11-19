@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.4 (2026/11/19 15:36 — 移植正式版樂手模式（?view=musician 可看歌詞與歌譜、唯讀歌單、WhatsApp 歌單附樂手連結）)';
+const DEV_VERSION_NOTE = 'v2.4.1 (2026/11/19 15:43 — 歌單分享連結跟隨目前環境（開發版不再誤指正式版）)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限

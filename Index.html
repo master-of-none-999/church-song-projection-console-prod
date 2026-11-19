@@ -325,7 +325,8 @@
      * 取得今日崇拜歌單專屬分享網址（forRole = 'musician' 時產生樂手歌譜連結，否則為同工投影連結）
      */
     function getSetlistShareUrl(forRole) {
-      let baseUrl = DEFAULT_WEBAPP_EXEC_URL;
+      /* 讀不到來源網址時（例如在 GitHub Pages 開啟），跟隨目前環境：開發版用開發版網址，避免歌單連結誤指正式版 */
+      let baseUrl = getBackendApiBaseUrl();
       try {
         const parentRef = (window.parent && window.parent !== window && window.parent.document) ? window.parent.document.referrer : '';
         const ref = (parentRef && parentRef.indexOf('script.google.com') !== -1 && parentRef.indexOf('/exec') !== -1)
