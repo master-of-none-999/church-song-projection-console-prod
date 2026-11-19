@@ -54,7 +54,12 @@
    - **樂手歌譜（G 欄）**：`.pdf`（最推薦）、`.jpg` / `.png`。
 2. **新增詩歌 PPT**：
    - **方法一（單首手動）**：將簡報上傳至已設為「知道連結的任何人可檢視」之 Google Drive 資料夾 ➔ 複製連結貼入《詩歌資料庫》試算表（`15pOhnHrf0DB-C2OgHuVFD4XfanXsNrJuUHniyuBDFPI`）的 **F 欄**。
-   - **方法二（多首自動配對）**：於 [`driveSync.js`](file:///c:/Users/user/Documents/MCP/church-ppt-console/driveSync.js) 設定 `PPT_FOLDER_ID` 後執行 `syncDriveFilesToSheet()`，依歌名或編號自動將連結寫入試算表。
+   - **方法二（自動同步）**：將檔案以「**編號.副檔名**」命名（例如 `001p.pps`、`001p.pdf`），放入「歌曲簡報」（`PPT_FOLDER_ID`）或「歌譜」（`PDF_FOLDER_ID`）資料夾或其子資料夾。[`driveSync.js`](driveSync.js) 的 `syncDriveFilesToSheet()` 會自動填入連結：
+     - 先以「檔名（去掉副檔名）完全等於編號」配對，配不到才用歌名；歌名配中多個檔案則不填。
+     - PPT 欄只收 `.ppt` / `.pps` / `.pptx` / `.ppsx` / Google 簡報；PDF 欄只收 `.pdf`。
+     - 同一編號有多個檔案（如 `001p.pps` 與 `001p.pptx`）時選用最近修改的一個。
+     - **只填空白格**；已有連結但 Drive 有不同檔案時不會覆蓋，改列於試算表「**待確認更新**」分頁，由同工決定是否手動改連結，或剔選「已處理／忽略」保留舊連結。
+     - 先執行 `previewDriveSync()` 可只預覽結果（不寫入）。正式版 GAS 可於「觸發條件」設定每小時執行 `syncDriveFilesToSheet`（**只可設於其中一個 GAS 專案**，開發版與正式版共用同一份試算表）。
 3. **替換既有詩歌 PPT（免改試算表連結技巧）**：
    - 若直接於雲端編輯原檔，或使用 Google Drive 右鍵「**檔案資訊 ➔ 管理版本 ➔ 上傳新版本**」（或拖拉同名同副檔名檔案並選「**取代現有檔案**」），檔案網址 ID 不會改變，**試算表 F 欄完全不需更新**。
    - 若先刪除舊檔再重傳，或副檔名改變（如 `.ppt` 改存為 `.pptx`），則會產生新網址 ID，需將新連結更新至試算表 F 欄。
