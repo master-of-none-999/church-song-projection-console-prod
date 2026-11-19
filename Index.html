@@ -667,15 +667,18 @@
       return detectIsDevEnv() ? DEV_WEBAPP_EXEC_URL : DEFAULT_WEBAPP_EXEC_URL;
     }
 
+    /* GitHub Pages 無法渲染 GAS 模板標籤，改由 getSongs API 回傳的 devVersionNote 更新版本備註 */
+    let liveVersionNote = '';
+
     function applyDevEnvironmentUI() {
       const isDev = detectIsDevEnv();
       const ribbon = document.getElementById('devTopRibbon');
       const ribbonNote = document.getElementById('devRibbonNote');
       const badge = document.getElementById('devEnvBadge');
       const badgeVer = document.getElementById('devBadgeVersion');
-      const noteText = (DEV_VERSION_NOTE && DEV_VERSION_NOTE.indexOf('devVersionNote') === -1)
-        ? DEV_VERSION_NOTE
-        : 'v2.2 (2026/11/09 — 新增多重圖層預載 0 延遲翻頁與換歌三步記憶體自動釋放機制)';
+      const noteText = liveVersionNote
+        || ((DEV_VERSION_NOTE && DEV_VERSION_NOTE.indexOf('devVersionNote') === -1) ? DEV_VERSION_NOTE : '')
+        || '（版本資料載入中…）';
       if (isDev) {
         if (ribbon) ribbon.classList.remove('hidden');
         if (ribbonNote) ribbonNote.innerText = '｜版本備註：' + noteText;
@@ -751,6 +754,10 @@
           .then(function(res) { return res.json(); })
           .then(function(payload) {
             allSongs = (payload && Array.isArray(payload.songs)) ? payload.songs : [];
+            if (payload && payload.devVersionNote) {
+              liveVersionNote = String(payload.devVersionNote);
+              applyDevEnvironmentUI();
+            }
             document.getElementById('loadingSpinner').classList.add('hidden');
             render();
           })
