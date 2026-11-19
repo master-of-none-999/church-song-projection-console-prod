@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.3.3 (2026/11/19 14:38 — 待確認更新分頁顯示現有檔案名稱與日期，並可一撳打開檔案或跳到對應列)';
+const DEV_VERSION_NOTE = 'v2.3.4 (2026/11/19 14:44 — 待確認更新新增「套用新連結」剔選、加闊欄位並正確顯示 Google 文件名稱)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限

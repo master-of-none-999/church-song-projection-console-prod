@@ -22,7 +22,8 @@ const PDF_FOLDER_ID = '1L5PhOfjf_3372NwojSCTr4lvhonc9SO2'; // 我的雲端硬碟
 
 const PPT_EXTENSIONS_ = ['ppt', 'pps', 'pptx', 'ppsx'];
 const PDF_EXTENSIONS_ = ['pdf'];
-const REVIEW_HEADERS_ = ['已處理／忽略', '編號', '歌名', '欄位', '跳到詩歌資料庫', '現有檔案', '現有檔案修改日期', '建議新檔案', '新檔案修改日期', '現有連結', '建議新連結', '偵測時間'];
+const REVIEW_HEADERS_ = ['套用新連結', '已處理／忽略', '編號', '歌名', '欄位', '跳到詩歌資料庫', '現有檔案', '現有檔案修改日期', '建議新檔案', '新檔案修改日期', '現有連結', '建議新連結', '偵測時間'];
+const REVIEW_COLUMN_WIDTHS_ = [90, 90, 70, 160, 50, 110, 260, 130, 220, 130, 200, 200, 130];
 
 function syncDriveFilesToSheet() {
   return runDriveSync_(false);
@@ -51,6 +52,9 @@ function runDriveSync_(dryRun) {
       Logger.log('⚠️ 試算表中沒有詩歌資料列。');
       return;
     }
+
+    const applied = applyTickedReviewRows_(ss, sheet, data, dryRun);
+    if (applied > 0) Logger.log('✏️ ' + (dryRun ? '將套用 ' : '已套用 ') + applied + ' 項「待確認更新」中剔選的新連結。');
 
     const rows = parseSongRows_(data);
     const pptFiles = listFolderFiles_(PPT_FOLDER_ID, PPT_EXTENSIONS_, true);
@@ -273,6 +277,54 @@ function cleanMatchText_(str) {
 }
 
 /**
+ * 套用「待確認更新」分頁中剔選了「套用新連結」的項目：把建議新連結寫入《詩歌資料庫》。
+ * 安全檢查：只有當該列現時的連結仍然等於分頁記錄的「現有連結」才會寫入，避免覆蓋同工之後手動改過的連結。
+ * 同時更新記憶體中的 data，令隨後的配對使用最新連結。回傳套用數目。
+ */
+function applyTickedReviewRows_(ss, sheet, data, dryRun) {
+  const review = ss.getSheetByName(REVIEW_SHEET_NAME);
+  if (!review || review.getLastRow() < 2 || review.getLastColumn() < 1) return 0;
+  const all = review.getRange(1, 1, review.getLastRow(), review.getLastColumn()).getValues();
+  const h = all[0].map(String);
+  const iApply = h.indexOf('套用新連結'), iNum = h.indexOf('編號'), iField = h.indexOf('欄位');
+  const iCur = h.indexOf('現有連結'), iNew = h.indexOf('建議新連結');
+  if (iApply < 0 || iNum < 0 || iField < 0 || iCur < 0 || iNew < 0) return 0;
+
+  const rows = parseSongRows_(data);
+  let count = 0;
+  all.slice(1).forEach(r => {
+    if (r[iApply] !== true) return;
+    const num = String(r[iNum]).trim().toLowerCase();
+    const field = String(r[iField]).trim();
+    const cur = String(r[iCur]).trim();
+    const neu = String(r[iNew]).trim();
+    const colKey = field === 'PPT' ? 'pptCol' : (field === 'PDF' ? 'pdfCol' : '');
+    if (!colKey || !neu) return;
+    const target = rows.find(row =>
+      String(row.number || row.title).toLowerCase() === num && row[colKey + '_value'] === cur);
+    if (!target) {
+      Logger.log('  ⏭️ ' + r[iNum] + ' ' + field + '：該列連結已被改動或找不到，未套用（請重新檢查）。');
+      return;
+    }
+    const col = target[colKey];
+    if (!dryRun) sheet.getRange(target.rowIndex + 1, col + 1).setValue(neu);
+    data[target.rowIndex][col] = neu;
+    target[colKey + '_value'] = neu;
+    count++;
+    Logger.log('  ✏️ 第 ' + (target.rowIndex + 1) + ' 列 ' + r[iNum] + ' ' + field + '：' + (dryRun ? '將改為' : '已改為') + '建議新連結。');
+  });
+  return count;
+}
+
+/** 取得任何 Google 連結中的檔案 ID（包括 Google 文件／試算表等），只用於顯示現有檔案名稱 */
+function anyGoogleFileId_(url) {
+  const id = extractDriveId_(url);
+  if (id) return id;
+  const m = String(url || '').match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  return m ? m[1] : '';
+}
+
+/**
  * 為待確認項目補上「現有連結」所指檔案的名稱與修改日期，方便同工對比，不用逐個打開連結。
  * 先查已列出的資料夾檔案，找不到才逐個向 Drive 讀取（只限待確認項目，數量少）。
  */
@@ -281,8 +333,8 @@ function describeCurrentFiles_(conflicts, knownFiles) {
   knownFiles.forEach(f => byId.set(f.id, f));
   conflicts.forEach(c => {
     if (!c.updated && c.file) c.updated = c.file.getLastUpdated();
-    const id = extractDriveId_(c.current);
-    c.currentName = '（不是 Drive 檔案連結）';
+    const id = anyGoogleFileId_(c.current);
+    c.currentName = '（無法從連結取得檔案 ID）';
     c.currentUpdated = '';
     if (!id) return;
     try {
@@ -290,7 +342,12 @@ function describeCurrentFiles_(conflicts, knownFiles) {
       const file = known ? known.file : DriveApp.getFileById(id);
       c.currentName = known ? known.name : file.getName();
       c.currentUpdated = file ? file.getLastUpdated() : '';
-      if (!known) c.currentName += '（不在歌曲簡報／歌譜資料夾內）';
+      if (!known) {
+        const mime = file.getMimeType ? String(file.getMimeType()) : '';
+        const kind = mime.indexOf('google-apps.document') !== -1 ? 'Google 文件，' :
+                     mime.indexOf('google-apps.presentation') !== -1 ? 'Google 簡報，' : '';
+        c.currentName += '（' + kind + '不在歌曲簡報／歌譜資料夾內）';
+      }
     } catch (e) {
       c.currentName = '（無法讀取：檔案可能已刪除或無權限）';
     }
@@ -325,7 +382,7 @@ function writeReviewSheet_(ss, conflicts, mainSheetId) {
     const done = ignored.has(reviewKey_(c.number, c.field, c.fileId));
     const rowNo = c.rowIndex + 1;
     return [
-      done, c.number, c.title, c.field,
+      false, done, c.number, c.title, c.field,
       '=HYPERLINK("#gid=' + mainSheetId + '&range=A' + rowNo + '","第 ' + rowNo + ' 列")',
       c.current ? hyperlinkFormula_(c.current, c.currentName) : c.currentName,
       c.currentUpdated || '',
@@ -334,23 +391,23 @@ function writeReviewSheet_(ss, conflicts, mainSheetId) {
       c.current, c.url, now
     ];
   });
-  rows.sort((a, b) => (a[0] === b[0] ? 0 : (a[0] ? 1 : -1)));
+  rows.sort((a, b) => (a[1] === b[1] ? 0 : (a[1] ? 1 : -1)));
 
   review.clear();
-  if (review.getMaxRows() > 1) review.getRange(2, 1, review.getMaxRows() - 1, 1).removeCheckboxes();
+  if (review.getMaxRows() > 1) review.getRange(2, 1, review.getMaxRows() - 1, 2).removeCheckboxes();
   review.getRange(1, 1, 1, REVIEW_HEADERS_.length).setValues([REVIEW_HEADERS_]).setFontWeight('bold');
   review.setFrozenRows(1);
+  REVIEW_COLUMN_WIDTHS_.forEach((w, i) => review.setColumnWidth(i + 1, w));
   if (rows.length > 0) {
     review.getRange(2, 1, rows.length, REVIEW_HEADERS_.length).setValues(rows);
-    review.getRange(2, 1, rows.length, 1).insertCheckboxes();
-    review.getRange(2, 7, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
-    review.getRange(2, 9, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
-    review.getRange(2, 12, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
+    review.getRange(2, 1, rows.length, 2).insertCheckboxes();
+    [8, 10, 13].forEach(col => review.getRange(2, col, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm'));
   }
   review.getRange(rows.length + 3, 1).setValue(
     '說明：以上詩歌在《詩歌資料庫》已有連結，但 Drive 有一個檔名等於編號的檔案與現有連結不同。' +
     '撳「現有檔案」與「建議新檔案」可直接打開兩個檔案對比；撳「跳到詩歌資料庫」可去到對應列。' +
-    '如要改用新檔案，請將「建議新連結」複製到該列；如要保留舊連結，請剔選「已處理／忽略」。改好連結後，下次同步此項會自動消失。');
+    '要改用新檔案：剔選「套用新連結」，下次同步（每小時，或在 GAS 手動執行 syncDriveFilesToSheet）會自動寫入並從此列表移除。' +
+    '要保留舊連結：剔選「已處理／忽略」。');
 }
 
 function hyperlinkFormula_(url, text) {
