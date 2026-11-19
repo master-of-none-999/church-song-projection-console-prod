@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.3.1 (2026/11/19 14:12 — Drive 同步支援編號開頭檔名並分級配對歌名)';
+const DEV_VERSION_NOTE = 'v2.3.2 (2026/11/19 14:24 — Drive 同步減少誤報：歌名配對只填空白格，同名重複檔案視為正確)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限

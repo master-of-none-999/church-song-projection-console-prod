@@ -73,7 +73,7 @@ function runDriveSync_(dryRun) {
     Logger.log('✅ ' + (dryRun ? '預覽' : '同步') + '完成：' +
       (dryRun ? '將填入 ' : '已填入 ') + result.fills.length + ' 個空白連結；' +
       '待確認更新 ' + result.conflicts.length + ' 項；' +
-      '找不到檔案 ' + result.unmatchedCount + ' 格（未列出）。');
+      '空白格找不到檔案 ' + result.unmatchedCount + ' 格（PPT ' + (result.unmatched.PPT || 0) + '、PDF ' + (result.unmatched.PDF || 0) + '，未列出）。');
     result.fills.forEach(f => Logger.log('  ➕ 第 ' + (f.rowIndex + 1) + ' 列 ' + f.number + ' ' + f.field + '：' + f.fileName));
     result.conflicts.forEach(c => Logger.log('  ❓ 第 ' + (c.rowIndex + 1) + ' 列 ' + c.number + ' ' + c.field + '：建議改為 ' + c.fileName));
   } catch (err) {
@@ -154,7 +154,7 @@ function planDriveSync_(rows, groups, songNumbers) {
   const fills = [];
   const conflicts = [];
   const notes = [];
-  let unmatchedCount = 0;
+  const unmatched = {};
 
   groups.forEach(group => {
     // 依檔名開頭的編號分組：「001p」「2007o是你」「012p 感謝神」都歸入對應編號
@@ -212,12 +212,20 @@ function planDriveSync_(rows, groups, songNumbers) {
       }
 
       if (candidates.length === 0) {
-        if (!current) unmatchedCount++;
+        if (!current) unmatched[group.field] = (unmatched[group.field] || 0) + 1;
         return;
       }
 
+      if (current) {
+        // 歌名配對只用於填空白格：已有人手設定的連結比歌名推測可靠，不列入待確認
+        if (matchedBy === '歌名') return;
+        // 現有連結已指向其中一個配對檔案（例如同名重複檔案的另一份），視為正確
+        const currentId = extractDriveId_(current);
+        if (candidates.some(f => f.id === currentId)) return;
+      }
+
       const chosen = pickLatest_(candidates);
-      if (candidates.length > 1 && (!current || extractDriveId_(current) !== chosen.id)) {
+      if (candidates.length > 1) {
         notes.push(label + ' ' + group.field + '：有 ' + candidates.length + ' 個檔案（' + candidates.map(f => f.name).join('、') + '），已選用最近修改的 ' + chosen.name + '。');
       }
 
@@ -228,15 +236,13 @@ function planDriveSync_(rows, groups, songNumbers) {
         fileName: chosen.name, updated: chosen.updated, matchedBy: matchedBy
       };
 
-      if (!current) {
-        fills.push(entry);
-      } else if (extractDriveId_(current) !== chosen.id) {
-        conflicts.push(entry);
-      }
+      if (!current) fills.push(entry);
+      else conflicts.push(entry);
     });
   });
 
-  return { fills: fills, conflicts: conflicts, notes: notes, unmatchedCount: unmatchedCount };
+  const unmatchedCount = Object.keys(unmatched).reduce((s, k) => s + unmatched[k], 0);
+  return { fills: fills, conflicts: conflicts, notes: notes, unmatched: unmatched, unmatchedCount: unmatchedCount };
 }
 
 function pickLatest_(files) {
