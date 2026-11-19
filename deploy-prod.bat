@@ -30,7 +30,12 @@ if "%DEPLOY_DESC%"=="" (
 
 echo.
 echo [1/4] 正在切換為正式版模式 (IS_DEV_ENV = false) 並更新 update code 交接檔...
-powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = true;', 'const IS_DEV_ENV = false;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-codejs.ps1" -DevEnv false
+if errorlevel 1 (
+    echo [錯誤] 切換正式版模式失敗！已取消部署。
+    pause
+    exit /b 1
+)
 if exist "update code" (
     copy /y "Code.js" "update code\gscode.txt" >nul
     copy /y "Index.html" "update code\church-ppt-console.txt" >nul
@@ -39,7 +44,7 @@ if exist "update code" (
 echo [2/4] 正在推送程式碼至【原版正式環境 GAS】...
 call npx @google/clasp -P "%~dp0.clasp.prod.json" push -f
 if errorlevel 1 (
-    powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-codejs.ps1" -DevEnv true
     echo [錯誤] clasp push 失敗！請檢查網路或原版專案共用權限。
     pause
     exit /b 1
@@ -50,7 +55,7 @@ echo [3/4] 正在更新【原版正式環境】部署版本...
 call npx @google/clasp -P "%~dp0.clasp.prod.json" deploy -i AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg -d "%DEPLOY_DESC%"
 rem 先保存 clasp deploy 的結束代碼，避免被下方 PowerShell 還原 IS_DEV_ENV 的結果覆蓋而漏報部署失敗
 set "DEPLOY_EXIT=%errorlevel%"
-powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-codejs.ps1" -DevEnv true
 if not "%DEPLOY_EXIT%"=="0" (
     echo [錯誤] clasp deploy 失敗！（結束代碼 %DEPLOY_EXIT%）已還原為開發模式，且不會推送至 GitHub。
     pause

@@ -20,7 +20,12 @@ if "%DEPLOY_DESC%"=="" (
 
 echo.
 echo [1/4] 正在自動更新 Code.js 的開發版標記與 DEV_VERSION_NOTE (日期 + 修改摘要)...
-powershell -NoProfile -Command "$desc = $env:DEPLOY_DESC -replace \"'\", ''; $dt = Get-Date -Format 'yyyy/MM/dd HH:mm'; $c = Get-Content -Raw -Encoding UTF8 'Code.js'; $c = $c -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;'; $c = $c -replace \"const DEV_VERSION_NOTE = '[^']*';\", (\"const DEV_VERSION_NOTE = '(\" + $dt + \") — \" + $desc + \"';\"); Set-Content -NoNewline -Encoding UTF8 'Code.js' $c"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-codejs.ps1" -DevEnv true -UpdateNote
+if errorlevel 1 (
+    echo [錯誤] 更新 Code.js 失敗！
+    pause
+    exit /b 1
+)
 
 echo [2/4] 正在推送程式碼至【開發測試副本 GAS】...
 call npx @google/clasp -P "%~dp0.clasp.json" push -f

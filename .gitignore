@@ -10,6 +10,7 @@
 !.agents/**
 !deploy-staging.bat
 !deploy-prod.bat
+!update-codejs.ps1
 !README.md
 !CLAUDE.md
 !robots.txt
