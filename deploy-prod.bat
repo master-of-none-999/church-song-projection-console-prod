@@ -48,9 +48,11 @@ if errorlevel 1 (
 echo.
 echo [3/4] 正在更新【原版正式環境】部署版本...
 call npx @google/clasp -P "%~dp0.clasp.prod.json" deploy -i AKfycbzLpxvB0i03jwmzpfpcvI26EtUo3OkFVA0WSMK9ars3Z-DKKbaUVlzm2VkEciJL-5cg -d "%DEPLOY_DESC%"
+rem 先保存 clasp deploy 的結束代碼，避免被下方 PowerShell 還原 IS_DEV_ENV 的結果覆蓋而漏報部署失敗
+set "DEPLOY_EXIT=%errorlevel%"
 powershell -NoProfile -Command "(Get-Content -Raw -Encoding UTF8 'Code.js') -replace 'const IS_DEV_ENV = false;', 'const IS_DEV_ENV = true;' | Set-Content -NoNewline -Encoding UTF8 'Code.js'"
-if errorlevel 1 (
-    echo [錯誤] clasp deploy 失敗！
+if not "%DEPLOY_EXIT%"=="0" (
+    echo [錯誤] clasp deploy 失敗！（結束代碼 %DEPLOY_EXIT%）已還原為開發模式，且不會推送至 GitHub。
     pause
     exit /b 1
 )
