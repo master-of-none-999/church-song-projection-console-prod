@@ -7,8 +7,8 @@
  *
  * 配對規則：
  *   1. 依副檔名分類：PPT 欄只收 .ppt/.pps/.pptx/.ppsx 與 Google 簡報；PDF 欄只收 .pdf
- *   2. 先以「檔名（去掉副檔名）完全等於編號」配對（不分大小寫），例如 001p.pps ↔ 001p
- *   3. 編號配不到才以歌名配對；歌名同時配中多個不同檔名則不填
+ *   2. 先以「檔名開頭的編號」配對（不分大小寫），例如 001p.pps、2007o是你.pptx、012p 感謝神.ppt
+ *   3. 編號配不到才以歌名配對（完全相同 → 去掉開頭數字後相同 → 無編號開頭的檔名包含歌名）；同一級配中多個檔名則不填
  *   4. 同一檔名有多個檔案（例如 001p.pps 與 001p.pptx）時，選用最近修改的一個
  *   5. 只填入空白格；已有連結但與配對結果不同時，不覆蓋，改列於「待確認更新」分頁供同工人手處理
  */
@@ -157,11 +157,25 @@ function planDriveSync_(rows, groups, songNumbers) {
   let unmatchedCount = 0;
 
   groups.forEach(group => {
-    const byStem = new Map();
+    // 依檔名開頭的編號分組：「001p」「2007o是你」「012p 感謝神」都歸入對應編號
+    const byNumber = new Map();
+    const stemInfo = new Map(); // stemKey -> { files, token, cleaned, cleanedRest }
     group.files.forEach(f => {
       const key = f.stem.toLowerCase();
-      if (!byStem.has(key)) byStem.set(key, []);
-      byStem.get(key).push(f);
+      if (!stemInfo.has(key)) {
+        const token = leadingNumberToken_(key);
+        stemInfo.set(key, {
+          files: [], token: token,
+          cleaned: cleanMatchText_(key),
+          cleanedRest: cleanMatchText_(token ? key.substring(token.length) : key)
+        });
+      }
+      const info = stemInfo.get(key);
+      info.files.push(f);
+      if (info.token) {
+        if (!byNumber.has(info.token)) byNumber.set(info.token, []);
+        byNumber.get(info.token).push(f);
+      }
     });
 
     rows.forEach(row => {
@@ -169,23 +183,29 @@ function planDriveSync_(rows, groups, songNumbers) {
       const current = row[group.colKey + '_value'];
       const label = row.number || row.title;
 
-      let candidates = row.numberKey ? (byStem.get(row.numberKey) || []) : [];
+      let candidates = row.numberKey ? (byNumber.get(row.numberKey) || []) : [];
       let matchedBy = '編號';
 
       if (candidates.length === 0) {
         const cleanedTitle = cleanMatchText_(row.title);
         if (cleanedTitle.length >= 2) {
-          const stems = [];
-          byStem.forEach((files, stemKey) => {
-            if (songNumbers.has(stemKey)) return; // 該檔名屬於另一首歌的編號，不作歌名配對
-            if (cleanMatchText_(stemKey).indexOf(cleanedTitle) !== -1) stems.push(stemKey);
+          // 歌名配對分三級：檔名完全等於歌名 → 去掉開頭數字後等於歌名 → 檔名（無編號開頭）包含歌名；取第一個有結果的一級
+          const tiers = [[], [], []];
+          stemInfo.forEach((info, stemKey) => {
+            if (info.token && songNumbers.has(info.token)) return; // 檔名屬於另一首歌的編號
+            if (info.cleaned === cleanedTitle) tiers[0].push(stemKey);
+            else if (info.cleanedRest === cleanedTitle) tiers[1].push(stemKey);
+            else if (!info.token && info.cleaned.indexOf(cleanedTitle) !== -1) tiers[2].push(stemKey); // 有編號開頭的檔名不作「包含」配對
           });
+          const stems = tiers.find(t => t.length > 0) || [];
           if (stems.length > 1) {
-            notes.push(label + ' ' + group.field + '：歌名「' + row.title + '」同時配中 ' + stems.length + ' 個檔名（' + stems.slice(0, 5).join('、') + '），未填入。');
+            if (!current) {
+              notes.push(label + ' ' + group.field + '：歌名「' + row.title + '」同時配中 ' + stems.length + ' 個檔名（' + stems.slice(0, 5).join('、') + '），未填入。');
+            }
             return;
           }
           if (stems.length === 1) {
-            candidates = byStem.get(stems[0]);
+            candidates = stemInfo.get(stems[0]).files;
             matchedBy = '歌名';
           }
         }
@@ -197,7 +217,7 @@ function planDriveSync_(rows, groups, songNumbers) {
       }
 
       const chosen = pickLatest_(candidates);
-      if (candidates.length > 1) {
+      if (candidates.length > 1 && (!current || extractDriveId_(current) !== chosen.id)) {
         notes.push(label + ' ' + group.field + '：有 ' + candidates.length + ' 個檔案（' + candidates.map(f => f.name).join('、') + '），已選用最近修改的 ' + chosen.name + '。');
       }
 
@@ -233,6 +253,12 @@ function buildFileUrl_(f) {
     return 'https://docs.google.com/presentation/d/' + f.id + '/edit?usp=drivesdk&rtpof=true&sd=true';
   }
   return f.file ? f.file.getUrl() : 'https://drive.google.com/file/d/' + f.id + '/view?usp=drivesdk';
+}
+
+/** 取得檔名開頭的編號，例如「2007o是你」→ 2007o、「012p 感謝神」→ 012p；編號後必須接非英數字元或結尾 */
+function leadingNumberToken_(stemKey) {
+  const m = String(stemKey).match(/^([0-9]+[a-z]*)(?=$|[^0-9a-z])/);
+  return m ? m[1] : '';
 }
 
 function cleanMatchText_(str) {
