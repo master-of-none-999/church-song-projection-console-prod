@@ -1,4 +1,4 @@
-// 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
+﻿// 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
 const DEV_VERSION_NOTE = 'v2.2.2 (2026/11/19 — 簡報白名單快取縮短至 2 分鐘，新增詩歌找不到時即時重讀試算表，頁數偵測立即生效)';
 
