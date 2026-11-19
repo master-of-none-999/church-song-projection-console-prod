@@ -1,6 +1,6 @@
 // 開發測試版識別開關（於開發測試副本為 true；部署至原版正式環境時由 deploy-prod.bat 自動切換為 false）
 const IS_DEV_ENV = true;
-const DEV_VERSION_NOTE = 'v2.4.4 (2026/11/19 16:48 — 手機版頁首標誌與標題置中，分頁按鈕不斷行)';
+const DEV_VERSION_NOTE = 'v2.4.5 (2026/11/19 16:53 — 更新影音同工操作指引（監視器選單、WhatsApp 兩條連結、樂手連結）)';
 
 function doGet(e) {
   // 預設強制為 false，只有當網址明確傳入 ?pass=admin 或 ?mode=admin 時才開啟同工權限
