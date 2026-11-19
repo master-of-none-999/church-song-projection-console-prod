@@ -36,7 +36,9 @@
 
 ### 🔜 下一階段規劃待辦（Backlog）
 - [ ] 完成開發測試版 `v2.2.1` 更多崇拜實戰情境測試後，一次完整同步至原版正式環境。
-- [ ] （規劃待實作）**Canva 簡報連結與動畫特效支援**：
+- [ ] （⏸️ 2026/11/19 已擱置，保持 GAS 開發）**Canva 簡報連結與動畫特效支援**：
+  - **擱置原因**：Canva／PowerPoint Online 屬跨網域 iframe 播放器且無公開控制 API，受瀏覽器同源安全政策限制，主螢幕無法遙控翻頁、亦無法沿用零延遲多重圖層預載（此限制與 GAS 平台無關，改用 Railway 等平台亦無法解決）；若要同時保留特效與遙控，須改用預先轉檔（影片／商業 HTML5 轉檔引擎）或於投影電腦以本機 PowerPoint 播放並由網頁遙控，成本與架構改動較大，暫不推行。
+  - 原規劃內容（保留作日後參考）：
   - 因 MS PowerPoint 或 Canva 匯出成 `.pptx` 放上 Google Slides 時，進階動畫與轉場特效會被過濾，規劃於 [`Index.html`](file:///c:/Users/user/Documents/MCP/church-ppt-console/Index.html) 新增 `canva.com` 網址自動識別：
     1. 允許直接於《詩歌資料庫》試算表 **F 欄** 貼上一般 Canva 公開分享連結（Share Link），由前端自動轉為 `/view?embed` 內嵌播放網址。
     2. 偵測到 Canva 簡報時自動停用 `#fsFocusGuard` 透明攔截層，將滑鼠點擊與鍵盤方向鍵交由 Canva 原生播放器處理，100% 保留 Canva 動態背景、文字動畫與轉場特效（同時保留全螢幕與黑屏待機功能）。
