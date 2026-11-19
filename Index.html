@@ -27,17 +27,20 @@
       </div>
     </div>
     <div class="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
-      <div class="flex items-center gap-2 sm:gap-4 min-w-0 max-w-full">
+      <div class="min-w-0 max-w-full">
+        <!-- 教會標誌（圖片本身已含「廣東道平安福音堂」字樣，860×113）：寬度隨螢幕縮放，手機約 220px、桌面最闊 320px。
+             brightness(1.035) 令圖片的淺灰底色 #F7F7F7 變成純白，與頁首白色背景融合。
+             圖片載入失敗時改為顯示紫色文字名稱。 -->
         <img id="churchLogo"
              src="https://lh3.googleusercontent.com/d/1EsMm_7YfStPxWeeVTZy-jldsA_xSn2I-"
-             alt="廣東道平安福音堂 Logo"
-             class="w-12 h-12 sm:w-20 sm:h-20 object-contain shrink-0"
-             onerror="this.style.display='none'; document.getElementById('defaultIcon').style.display='inline-block';">
-        <i id="defaultIcon" class="fa-solid fa-church text-purple-600 text-3xl sm:text-5xl font-bold hidden shrink-0"></i>
-        <div class="min-w-0">
-          <!-- 標題字體隨螢幕寬度縮放（手機約 18–20px、桌面 30px），並禁止斷行 -->
-          <div class="text-[clamp(1.125rem,5.6vw,1.875rem)] leading-tight font-extrabold text-purple-700 sm:tracking-wide whitespace-nowrap">廣東道平安福音堂</div>
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+             alt="廣東道平安福音堂"
+             width="860" height="113"
+             class="block h-auto w-[clamp(220px,60vw,320px)] max-w-full"
+             style="filter: brightness(1.035);"
+             onerror="this.style.display='none'; document.getElementById('churchNameText').classList.remove('hidden');">
+        <div id="churchNameText" class="hidden text-[clamp(1.125rem,5.6vw,1.875rem)] leading-tight font-extrabold text-purple-700 sm:tracking-wide whitespace-nowrap">廣東道平安福音堂</div>
+        <div>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 sm:mt-1.5">
             <h1 class="text-[clamp(0.875rem,4vw,1.25rem)] leading-snug font-bold text-slate-700 whitespace-nowrap" id="appTitle">詩歌快速檢索系統</h1>
             <span id="devEnvBadge" class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
               <span>🧪 開發測試版</span>
