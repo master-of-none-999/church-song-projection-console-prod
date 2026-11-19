@@ -22,7 +22,7 @@ const PDF_FOLDER_ID = '1L5PhOfjf_3372NwojSCTr4lvhonc9SO2'; // 我的雲端硬碟
 
 const PPT_EXTENSIONS_ = ['ppt', 'pps', 'pptx', 'ppsx'];
 const PDF_EXTENSIONS_ = ['pdf'];
-const REVIEW_HEADERS_ = ['已處理／忽略', '編號', '歌名', '欄位', '現有連結', '建議新檔案', '新檔案修改日期', '建議新連結', '試算表列號', '偵測時間'];
+const REVIEW_HEADERS_ = ['已處理／忽略', '編號', '歌名', '欄位', '跳到詩歌資料庫', '現有檔案', '現有檔案修改日期', '建議新檔案', '新檔案修改日期', '現有連結', '建議新連結', '偵測時間'];
 
 function syncDriveFilesToSheet() {
   return runDriveSync_(false);
@@ -64,10 +64,11 @@ function runDriveSync_(dryRun) {
     ], songNumbers);
 
     result.notes.forEach(n => Logger.log('ℹ️ ' + n));
+    describeCurrentFiles_(result.conflicts, pptFiles.concat(pdfFiles));
 
     if (!dryRun) {
       result.fills.forEach(f => sheet.getRange(f.rowIndex + 1, f.col + 1).setValue(f.url));
-      writeReviewSheet_(ss, result.conflicts);
+      writeReviewSheet_(ss, result.conflicts, sheet.getSheetId());
     }
 
     Logger.log('✅ ' + (dryRun ? '預覽' : '同步') + '完成：' +
@@ -75,7 +76,7 @@ function runDriveSync_(dryRun) {
       '待確認更新 ' + result.conflicts.length + ' 項；' +
       '空白格找不到檔案 ' + result.unmatchedCount + ' 格（PPT ' + (result.unmatched.PPT || 0) + '、PDF ' + (result.unmatched.PDF || 0) + '，未列出）。');
     result.fills.forEach(f => Logger.log('  ➕ 第 ' + (f.rowIndex + 1) + ' 列 ' + f.number + ' ' + f.field + '：' + f.fileName));
-    result.conflicts.forEach(c => Logger.log('  ❓ 第 ' + (c.rowIndex + 1) + ' 列 ' + c.number + ' ' + c.field + '：建議改為 ' + c.fileName));
+    result.conflicts.forEach(c => Logger.log('  ❓ 第 ' + (c.rowIndex + 1) + ' 列 ' + c.number + ' ' + c.field + '：現有 ' + c.currentName + ' → 建議改為 ' + c.fileName));
   } catch (err) {
     Logger.log('❌ 同步失敗：' + err.toString());
     throw err;
@@ -233,7 +234,7 @@ function planDriveSync_(rows, groups, songNumbers) {
       const entry = {
         rowIndex: row.rowIndex, col: col, number: label, title: row.title,
         field: group.field, current: current, url: url, fileId: chosen.id,
-        fileName: chosen.name, updated: chosen.updated, matchedBy: matchedBy
+        fileName: chosen.name, file: chosen.file, updated: chosen.updated, matchedBy: matchedBy
       };
 
       if (!current) fills.push(entry);
@@ -272,17 +273,47 @@ function cleanMatchText_(str) {
 }
 
 /**
+ * 為待確認項目補上「現有連結」所指檔案的名稱與修改日期，方便同工對比，不用逐個打開連結。
+ * 先查已列出的資料夾檔案，找不到才逐個向 Drive 讀取（只限待確認項目，數量少）。
+ */
+function describeCurrentFiles_(conflicts, knownFiles) {
+  const byId = new Map();
+  knownFiles.forEach(f => byId.set(f.id, f));
+  conflicts.forEach(c => {
+    if (!c.updated && c.file) c.updated = c.file.getLastUpdated();
+    const id = extractDriveId_(c.current);
+    c.currentName = '（不是 Drive 檔案連結）';
+    c.currentUpdated = '';
+    if (!id) return;
+    try {
+      const known = byId.get(id);
+      const file = known ? known.file : DriveApp.getFileById(id);
+      c.currentName = known ? known.name : file.getName();
+      c.currentUpdated = file ? file.getLastUpdated() : '';
+      if (!known) c.currentName += '（不在歌曲簡報／歌譜資料夾內）';
+    } catch (e) {
+      c.currentName = '（無法讀取：檔案可能已刪除或無權限）';
+    }
+  });
+}
+
+/**
  * 重建「待確認更新」分頁：每次同步按最新狀況重列（已解決的項目自動消失）。
  * 同工剔選「已處理／忽略」的項目會被記住，下次同步仍保留剔選，方便決定保留舊連結。
  */
-function writeReviewSheet_(ss, conflicts) {
+function writeReviewSheet_(ss, conflicts, mainSheetId) {
   let review = ss.getSheetByName(REVIEW_SHEET_NAME);
   const ignored = new Set();
-  if (review && review.getLastRow() > 1) {
-    const old = review.getRange(2, 1, review.getLastRow() - 1, REVIEW_HEADERS_.length).getValues();
-    old.forEach(r => {
-      if (r[0] === true) ignored.add(reviewKey_(r[1], r[3], extractDriveId_(r[7])));
-    });
+  if (review && review.getLastRow() > 1 && review.getLastColumn() > 0) {
+    // 依標題名稱找欄位，即使日後欄位次序改變，已剔選的項目仍會被記住
+    const all = review.getRange(1, 1, review.getLastRow(), review.getLastColumn()).getValues();
+    const h = all[0].map(String);
+    const iDone = h.indexOf('已處理／忽略'), iNum = h.indexOf('編號'), iField = h.indexOf('欄位'), iNew = h.indexOf('建議新連結');
+    if (iDone >= 0 && iNum >= 0 && iField >= 0 && iNew >= 0) {
+      all.slice(1).forEach(r => {
+        if (r[iDone] === true) ignored.add(reviewKey_(r[iNum], r[iField], extractDriveId_(r[iNew])));
+      });
+    }
   }
   if (!review) {
     if (conflicts.length === 0) return;
@@ -292,21 +323,39 @@ function writeReviewSheet_(ss, conflicts) {
   const now = new Date();
   const rows = conflicts.map(c => {
     const done = ignored.has(reviewKey_(c.number, c.field, c.fileId));
-    return [done, c.number, c.title, c.field, c.current, c.fileName, c.updated || '', c.url, c.rowIndex + 1, now];
+    const rowNo = c.rowIndex + 1;
+    return [
+      done, c.number, c.title, c.field,
+      '=HYPERLINK("#gid=' + mainSheetId + '&range=A' + rowNo + '","第 ' + rowNo + ' 列")',
+      c.current ? hyperlinkFormula_(c.current, c.currentName) : c.currentName,
+      c.currentUpdated || '',
+      hyperlinkFormula_(c.url, c.fileName),
+      c.updated || '',
+      c.current, c.url, now
+    ];
   });
   rows.sort((a, b) => (a[0] === b[0] ? 0 : (a[0] ? 1 : -1)));
 
-  review.clearContents();
+  review.clear();
   if (review.getMaxRows() > 1) review.getRange(2, 1, review.getMaxRows() - 1, 1).removeCheckboxes();
   review.getRange(1, 1, 1, REVIEW_HEADERS_.length).setValues([REVIEW_HEADERS_]).setFontWeight('bold');
   review.setFrozenRows(1);
   if (rows.length > 0) {
     review.getRange(2, 1, rows.length, REVIEW_HEADERS_.length).setValues(rows);
     review.getRange(2, 1, rows.length, 1).insertCheckboxes();
+    review.getRange(2, 7, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
+    review.getRange(2, 9, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
+    review.getRange(2, 12, rows.length, 1).setNumberFormat('yyyy/mm/dd hh:mm');
   }
   review.getRange(rows.length + 3, 1).setValue(
-    '說明：以上詩歌在《詩歌資料庫》已有連結，但 Drive 有不同的檔案。如要改用新檔案，請將「建議新連結」複製到《詩歌資料庫》對應列；' +
-    '如要保留舊連結，請剔選「已處理／忽略」。改好連結後，下次同步此項會自動消失。');
+    '說明：以上詩歌在《詩歌資料庫》已有連結，但 Drive 有一個檔名等於編號的檔案與現有連結不同。' +
+    '撳「現有檔案」與「建議新檔案」可直接打開兩個檔案對比；撳「跳到詩歌資料庫」可去到對應列。' +
+    '如要改用新檔案，請將「建議新連結」複製到該列；如要保留舊連結，請剔選「已處理／忽略」。改好連結後，下次同步此項會自動消失。');
+}
+
+function hyperlinkFormula_(url, text) {
+  const q = s => String(s || '').replace(/"/g, '""');
+  return '=HYPERLINK("' + q(url) + '","' + q(text) + '")';
 }
 
 function reviewKey_(number, field, fileId) {
